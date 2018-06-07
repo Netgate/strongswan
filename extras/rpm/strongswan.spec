@@ -111,7 +111,7 @@ PT-TLS to support TNC over TLS.
     --with-ipsecdir=%{_libexecdir}/%{real_name} \
     --bindir=%{_libexecdir}/%{real_name} \
     --with-ipseclibdir=%{_libdir}/%{real_name} \
-    --with-fips-mode=2 \
+    --with-fips-mode=0 \
     --with-tss=trousers \
     --disable-nm \
     --enable-systemd \
