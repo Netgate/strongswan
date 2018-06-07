@@ -51,3 +51,6 @@ coverage/
 /*.files
 /*.includes
 test-driver
+!extras/rpm/Makefile.in
+build-root
+.version

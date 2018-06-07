@@ -1,4 +1,6 @@
 /*
+ * Copyright 2016-2018 Rubicon Communications, LLC
+ *
  * Copyright (C) 2006-2017 Tobias Brunner
  * Copyright (C) 2016 Andreas Steffen
  * Copyright (C) 2005-2008 Martin Willi
@@ -522,6 +524,7 @@ static status_t update_usebytes(private_child_sa_t *this, bool inbound)
 				.dst = this->my_addr,
 				.spi = this->my_spi,
 				.proto = proto_ike2ip(this->protocol),
+				.mark = this->mark_in,
 			};
 			kernel_ipsec_query_sa_t query = {};
 
@@ -854,7 +857,7 @@ static status_t install_internal(private_child_sa_t *this, chunk_t encr,
 		.dst = dst,
 		.spi = spi,
 		.proto = proto_ike2ip(this->protocol),
-		.mark = inbound ? (mark_t){} : this->mark_out,
+		.mark = inbound ? this->mark_in : this->mark_out,
 	};
 	sa = (kernel_ipsec_add_sa_t){
 		.reqid = this->reqid,
@@ -1449,6 +1452,7 @@ METHOD(child_sa_t, update, status_t,
 				.dst = this->my_addr,
 				.spi = this->my_spi,
 				.proto = proto_ike2ip(this->protocol),
+				.mark = this->mark_in,
 			};
 			kernel_ipsec_update_sa_t sa = {
 				.cpi = this->ipcomp != IPCOMP_NONE ? this->my_cpi : 0,
@@ -1634,6 +1638,7 @@ METHOD(child_sa_t, destroy, void,
 			.dst = this->my_addr,
 			.spi = this->my_spi,
 			.proto = proto_ike2ip(this->protocol),
+			.mark = this->mark_in,
 		};
 		kernel_ipsec_del_sa_t sa = {
 			.cpi = this->my_cpi,

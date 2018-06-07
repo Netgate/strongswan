@@ -1,4 +1,6 @@
 /*
+ * Copyright 2016-2018 Rubicon Communications, LLC
+ *
  * Copyright (C) 2015 Tobias Brunner, Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
@@ -143,8 +145,8 @@ static void list_child(private_vici_query_t *this, vici_builder_t *b,
 		{
 			b->add_kv(b, "encap", "yes");
 		}
-		b->add_kv(b, "spi-in", "%.8x", ntohl(child->get_spi(child, TRUE)));
-		b->add_kv(b, "spi-out", "%.8x", ntohl(child->get_spi(child, FALSE)));
+		b->add_kv(b, "spi-in", "%u", ntohl(child->get_spi(child, TRUE)));
+		b->add_kv(b, "spi-out", "%u", ntohl(child->get_spi(child, FALSE)));
 
 		if (child->get_ipcomp(child) != IPCOMP_NONE)
 		{
@@ -347,9 +349,9 @@ static void list_ike(private_vici_query_t *this, vici_builder_t *b,
 	{
 		b->add_kv(b, "initiator", "yes");
 	}
-	b->add_kv(b, "initiator-spi", "%.16"PRIx64,
+	b->add_kv(b, "initiator-spi", "%"PRIu64,
 			  be64toh(id->get_initiator_spi(id)));
-	b->add_kv(b, "responder-spi", "%.16"PRIx64,
+	b->add_kv(b, "responder-spi", "%"PRIu64,
 			  be64toh(id->get_responder_spi(id)));
 
 	add_condition(b, ike_sa, "nat-local", COND_NAT_HERE);

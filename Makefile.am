@@ -77,8 +77,28 @@ coverage:
 		@echo "reconfigure with --enable-coverage"
 endif
 
+pkg-srpm: dist
+	make -C extras/rpm srpm
+
+pkg-rpm: dist
+	make -C extras/rpm
+
+#### include version information in the distibution tarball
+EXTRA_DIST += extras/scripts/version extras/scripts/.version
+
+extras/scripts/.version:
+	rm -f extras/scripts/.version
+	sh extras/scripts/version > extras/scripts/.tmpversion
+	mv extras/scripts/.tmpversion extras/scripts/.version
+
+dist-hook:
+	rm -f extras/scripts/.version
+
+DISTCLEANFILES = extras/scripts/.version *.tar.gz
+
 clean-local: cov-reset-common
 		@find $(top_builddir)/src $(top_builddir)/scripts -name "*.gcno" -delete
 		@rm -rf apidoc
+		@rm -rf build-root
 
 .PHONY: cov-reset-common cov-reset cov-report coverage apidoc

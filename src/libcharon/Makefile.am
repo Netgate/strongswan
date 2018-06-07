@@ -559,6 +559,13 @@ if MONOLITHIC
 endif
 endif
 
+if USE_KERNEL_VPP
+  SUBDIRS += plugins/kernel_vpp
+if MONOLITHIC
+  libcharon_la_LIBADD += plugins/kernel_vpp/libstrongswan-kernel-vpp.la
+endif
+endif
+
 if USE_KERNEL_LIBIPSEC
   SUBDIRS += plugins/kernel_libipsec
 if MONOLITHIC

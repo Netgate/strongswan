@@ -19,9 +19,9 @@
 #  initialize & set some vars
 # ============================
 
-AC_INIT([strongSwan],[5.5.3])
+AC_INIT([strongSwan],[m4_esyscmd([./extras/scripts/version])])
 AM_INIT_AUTOMAKE(m4_esyscmd([
-	echo tar-ustar
+	echo tar-pax
 	echo subdir-objects
 	case `automake --version | head -n 1` in
 		*" 1.9"*);;
@@ -108,6 +108,20 @@ AC_ARG_WITH(
 	 AC_SUBST(charon_natt_port, [$withval])],
 	[AC_SUBST(charon_natt_port, 4500)]
 )
+
+AC_ARG_WITH(
+	[libvppmgmtdir],
+	[AS_HELP_STRING([--with-libvppmgmtdir=DIR], [use libvppmgmt in DIR for build])],
+	[LIBVPPMGMT_DIR="$withval"]
+)
+AC_SUBST(LIBVPPMGMT_DIR)
+
+AC_ARG_WITH(
+	[vppdir],
+	[AS_HELP_STRING([--with-vppdir=DIR], [use VPP in DIR for build])],
+	[VPP_DIR="$withval"]
+)
+AC_SUBST(VPP_DIR)
 
 AC_MSG_CHECKING([configured UDP ports ($charon_udp_port, $charon_natt_port)])
 if test x$charon_udp_port != x0 -a x$charon_udp_port = x$charon_natt_port; then
@@ -212,6 +226,7 @@ ARG_ENABL_SET([xauth-pam],      [enable XAuth backend using PAM to verify passwo
 ARG_ENABL_SET([xauth-noauth],   [enable XAuth pseudo-backend that does not actually verify or even request any credentials.])
 # kernel interfaces / sockets
 ARG_DISBL_SET([kernel-netlink], [disable the netlink kernel interface.])
+ARG_DISBL_SET([kernel-vpp],     [disable the vpp kernel interface.])
 ARG_ENABL_SET([kernel-pfkey],   [enable the PF_KEY kernel interface.])
 ARG_ENABL_SET([kernel-pfroute], [enable the PF_ROUTE kernel interface.])
 ARG_ENABL_SET([kernel-iph],     [enable the Windows IP Helper based networking backend.])
@@ -1381,6 +1396,7 @@ ADD_PLUGIN([kernel-iph],           [c charon])
 ADD_PLUGIN([kernel-pfkey],         [c charon starter nm cmd])
 ADD_PLUGIN([kernel-pfroute],       [c charon starter nm cmd])
 ADD_PLUGIN([kernel-netlink],       [c charon starter nm cmd])
+ADD_PLUGIN([kernel-vpp],           [c charon starter nm cmd])
 ADD_PLUGIN([resolve],              [c charon cmd])
 ADD_PLUGIN([socket-default],       [c charon nm cmd])
 ADD_PLUGIN([socket-dynamic],       [c charon cmd])
@@ -1549,6 +1565,7 @@ AM_CONDITIONAL(USE_DHCP, test x$dhcp = xtrue)
 AM_CONDITIONAL(USE_LOAD_TESTER, test x$load_tester = xtrue)
 AM_CONDITIONAL(USE_HA, test x$ha = xtrue)
 AM_CONDITIONAL(USE_KERNEL_NETLINK, test x$kernel_netlink = xtrue)
+AM_CONDITIONAL(USE_KERNEL_VPP, test x$kernel_vpp = xtrue)
 AM_CONDITIONAL(USE_KERNEL_PFKEY, test x$kernel_pfkey = xtrue)
 AM_CONDITIONAL(USE_KERNEL_PFROUTE, test x$kernel_pfroute = xtrue)
 AM_CONDITIONAL(USE_KERNEL_LIBIPSEC, test x$kernel_libipsec = xtrue)
@@ -1881,6 +1898,7 @@ AC_CONFIG_FILES([
 	src/libcharon/plugins/uci/Makefile
 	src/libcharon/plugins/ha/Makefile
 	src/libcharon/plugins/kernel_netlink/Makefile
+	src/libcharon/plugins/kernel_vpp/Makefile
 	src/libcharon/plugins/kernel_pfkey/Makefile
 	src/libcharon/plugins/kernel_pfroute/Makefile
 	src/libcharon/plugins/kernel_libipsec/Makefile
@@ -1936,6 +1954,7 @@ AC_CONFIG_FILES([
 	src/swanctl/Makefile
 	scripts/Makefile
 	testing/Makefile
+	extras/rpm/Makefile
 ])
 
 # =================

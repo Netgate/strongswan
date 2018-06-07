@@ -1,4 +1,6 @@
 /*
+ * Copyright 2016-2018 Rubicon Communications, LLC
+ *
  * Copyright (C) 2006-2007 Martin Willi
  * Copyright (C) 2006 Tobias Brunner, Daniel Roethlisberger
  * Hochschule fuer Technik Rapperswil
@@ -266,6 +268,9 @@ static void process_payloads(private_ike_natd_t *this, message_t *message)
 METHOD(task_t, process_i, status_t,
 	private_ike_natd_t *this, message_t *message)
 {
+	/* No NAT-T, only ESP */
+	return SUCCESS;
+
 	process_payloads(this, message);
 
 	if (message->get_exchange_type(message) == IKE_SA_INIT)
@@ -293,6 +298,9 @@ METHOD(task_t, build_i, status_t,
 	enumerator_t *enumerator;
 	ike_cfg_t *ike_cfg;
 	host_t *host;
+
+	/* No NAT-T, only ESP */
+	return NEED_MORE;
 
 	if (this->hasher == NULL)
 	{
@@ -366,6 +374,9 @@ METHOD(task_t, build_r, status_t,
 	notify_payload_t *notify;
 	host_t *me, *other;
 
+	/* No NAT-T, only ESP */
+	return SUCCESS;
+
 	/* only add notifies on successful responses. */
 	if (message->get_exchange_type(message) == IKE_SA_INIT &&
 		message->get_payload(message, PLV2_SECURITY_ASSOCIATION) == NULL)
@@ -401,6 +412,9 @@ METHOD(task_t, build_r, status_t,
 METHOD(task_t, process_r, status_t,
 	private_ike_natd_t *this, message_t *message)
 {
+	/* No NAT-T, only ESP */
+	return NEED_MORE;
+
 	process_payloads(this, message);
 
 	return NEED_MORE;
