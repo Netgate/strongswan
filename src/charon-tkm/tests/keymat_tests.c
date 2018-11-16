@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2012 Reto Buerki
  * Copyright (C) 2012 Adrian-Ken Rueegsegger
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,7 +17,7 @@
 #include <tests/test_suite.h>
 
 #include <daemon.h>
-#include <config/proposal.h>
+#include <crypto/proposal/proposal.h>
 #include <encoding/payloads/ike_header.h>
 #include <tkm/client.h>
 

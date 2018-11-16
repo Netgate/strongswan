@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2012 Tobias Brunner
  * Copyright (C) 2006 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -157,6 +157,7 @@ eap_vendor_type_t *eap_vendor_type_from_string(char *str)
 			type = eap_type_from_string(part);
 			if (!type)
 			{
+				errno = 0;
 				type = strtoul(part, &end, 0);
 				if (*end != '\0' || errno)
 				{
@@ -166,6 +167,7 @@ eap_vendor_type_t *eap_vendor_type_from_string(char *str)
 			}
 			continue;
 		}
+		errno = 0;
 		vendor = strtoul(part, &end, 0);
 		if (*end != '\0' || errno)
 		{

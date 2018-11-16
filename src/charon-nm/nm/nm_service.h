@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,7 +23,7 @@
 
 #include <glib.h>
 #include <glib-object.h>
-#include <nm-vpn-plugin.h>
+#include <NetworkManager.h>
 
 #include "nm_creds.h"
 #include "nm_handler.h"
@@ -40,11 +40,11 @@
 #define NM_DBUS_PATH_STRONGSWAN       "/org/freedesktop/NetworkManager/strongswan"
 
 typedef struct {
-	NMVPNPlugin parent;
+	NMVpnServicePlugin parent;
 } NMStrongswanPlugin;
 
 typedef struct {
-	NMVPNPluginClass parent;
+	NMVpnServicePluginClass parent;
 } NMStrongswanPluginClass;
 
 GType nm_strongswan_plugin_get_type(void);

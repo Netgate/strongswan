@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2012 Tobias Brunner
  * Copyright (C) 2008 Andreas Steffen
- * Hochschule fuer Technik Rapperswil, Switzerland
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -202,7 +202,7 @@ pkcs7_attributes_t *pkcs7_attributes_create(void)
 }
 
 /**
- * ASN.1 definition of the X.501 atttribute type
+ * ASN.1 definition of the X.501 attribute type
  */
 static const asn1Object_t attributesObjects[] = {
 	{ 0, "attributes",		ASN1_SET,		ASN1_LOOP }, /* 0 */

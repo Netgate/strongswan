@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012-2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -37,6 +37,19 @@ ENUM(ipcomp_transform_names, IPCOMP_NONE, IPCOMP_LZJH,
 	"IPCOMP_LZJH"
 );
 
+ENUM(hw_offload_names, HW_OFFLOAD_NO, HW_OFFLOAD_AUTO,
+	"no",
+	"yes",
+	"auto",
+);
+
+ENUM(dscp_copy_names, DSCP_COPY_OUT_ONLY, DSCP_COPY_NO,
+	"out",
+	"in",
+	"yes",
+	"no",
+);
+
 /*
  * See header
  */
@@ -56,7 +69,7 @@ bool ipsec_sa_cfg_equals(ipsec_sa_cfg_t *a, ipsec_sa_cfg_t *b)
 /*
  * See header
  */
-bool mark_from_string(const char *value, mark_t *mark)
+bool mark_from_string(const char *value, mark_op_t ops, mark_t *mark)
 {
 	char *endptr;
 
@@ -66,8 +79,44 @@ bool mark_from_string(const char *value, mark_t *mark)
 	}
 	if (strcasepfx(value, "%unique"))
 	{
-		mark->value = MARK_UNIQUE;
+		if (!(ops & MARK_OP_UNIQUE))
+		{
+			DBG1(DBG_APP, "unexpected use of %%unique mark", value);
+			return FALSE;
+		}
 		endptr = (char*)value + strlen("%unique");
+		if (strcasepfx(endptr, "-dir"))
+		{
+			mark->value = MARK_UNIQUE_DIR;
+			endptr += strlen("-dir");
+		}
+		else if (!*endptr || *endptr == '/')
+		{
+			mark->value = MARK_UNIQUE;
+		}
+		else
+		{
+			DBG1(DBG_APP, "invalid mark value: %s", value);
+			return FALSE;
+		}
+	}
+	else if (strcasepfx(value, "%same"))
+	{
+		if (!(ops & MARK_OP_SAME))
+		{
+			DBG1(DBG_APP, "unexpected use of %%same mark", value);
+			return FALSE;
+		}
+		endptr = (char*)value + strlen("%same");
+		if (!*endptr || *endptr == '/')
+		{
+			mark->value = MARK_SAME;
+		}
+		else
+		{
+			DBG1(DBG_APP, "invalid mark value: %s", value);
+			return FALSE;
+		}
 	}
 	else
 	{
@@ -91,7 +140,10 @@ bool mark_from_string(const char *value, mark_t *mark)
 	{
 		mark->mask = 0xffffffff;
 	}
-	/* apply the mask to ensure the value is in range */
-	mark->value &= mark->mask;
+	if (!MARK_IS_UNIQUE(mark->value))
+	{
+		/* apply the mask to ensure the value is in range */
+		mark->value &= mark->mask;
+	}
 	return TRUE;
 }

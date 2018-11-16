@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2015 Tobias Brunner
- * Copyright (C) 2007 Martin Willi
+ * Copyright (C) 2015-2017 Tobias Brunner
  * Copyright (C) 2014-2017 Andreas Steffen
+ * Copyright (C) 2007 Martin Willi
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -28,7 +28,6 @@ typedef enum key_type_t key_type_t;
 typedef enum signature_scheme_t signature_scheme_t;
 typedef enum encryption_scheme_t encryption_scheme_t;
 
-#include <library.h>
 #include <utils/identification.h>
 #include <credentials/cred_encoding.h>
 
@@ -89,6 +88,8 @@ enum signature_scheme_t {
 	SIGN_RSA_EMSA_PKCS1_SHA3_384,
 	/** EMSA-PKCS1_v1.5 signature as in PKCS#1 using RSA and SHA-3_512 */
 	SIGN_RSA_EMSA_PKCS1_SHA3_512,
+	/** EMSA-PSS signature as in PKCS#1 using RSA                      */
+	SIGN_RSA_EMSA_PSS,
 	/** ECDSA with SHA-1 using DER encoding as in RFC 3279             */
 	SIGN_ECDSA_WITH_SHA1_DER,
 	/** ECDSA with SHA-256 using DER encoding as in RFC 3279           */
@@ -105,9 +106,9 @@ enum signature_scheme_t {
 	SIGN_ECDSA_384,
 	/** ECDSA on the P-521 curve with SHA-512 as in RFC 4754           */
 	SIGN_ECDSA_521,
-	/** PureEdDSA on Curve25519 as in draft-ietf-curdle-pkix (RFC TBA) */
+	/** PureEdDSA on Curve25519 as in RFC 8410                         */
 	SIGN_ED25519,
-	/** PureEdDSA on Curve448 as in draft-ietf-curdle-pkix (RFC TBA)   */
+	/** PureEdDSA on Curve448 as in RFC 8410                           */
 	SIGN_ED448,
 	/** BLISS with SHA-2_256                                           */
 	SIGN_BLISS_WITH_SHA2_256,
@@ -168,12 +169,13 @@ struct public_key_t {
 	/**
 	 * Verifies a signature against a chunk of data.
 	 *
-	 * @param scheme	signature scheme to use for verification, may be default
+	 * @param scheme	signature scheme to use for verification
+	 * @param params	optional parameters required by the specified scheme
 	 * @param data		data to check signature against
 	 * @param signature	signature to check
 	 * @return			TRUE if signature matches
 	 */
-	bool (*verify)(public_key_t *this, signature_scheme_t scheme,
+	bool (*verify)(public_key_t *this, signature_scheme_t scheme, void *params,
 				   chunk_t data, chunk_t signature);
 
 	/**
@@ -279,11 +281,11 @@ int signature_scheme_to_oid(signature_scheme_t scheme);
 
 /**
  * Enumerate signature schemes that are appropriate for a key of the given type
- * and size|strength.
+ * and size|strength ordered by increasing strength.
  *
  * @param type			type of the key
  * @param size			size or strength of the key
- * @return				enumerator over signature_scheme_t (increasing strength)
+ * @return				enumerator over signature_params_t* (by strength)
  */
 enumerator_t *signature_schemes_for_key(key_type_t type, int size);
 

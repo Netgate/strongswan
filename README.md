@@ -36,7 +36,7 @@ Configuration on gateway _moon_:
 
     /etc/swanctl/x509ca/strongswanCert.pem
     /etc/swanctl/x509/moonCert.pem
-    /etc/swanctl/priv/moonKey.pem
+    /etc/swanctl/private/moonKey.pem
 
     /etc/swanctl/swanctl.conf:
 
@@ -57,7 +57,7 @@ Configuration on gateway _moon_:
                         local_ts  = 10.1.0.0/16
                         remote_ts = 10.2.0.0/16
                         start_action = trap
-                   }
+                    }
                 }
             }
         }
@@ -66,7 +66,7 @@ Configuration on gateway _sun_:
 
     /etc/swanctl/x509ca/strongswanCert.pem
     /etc/swanctl/x509/sunCert.pem
-    /etc/swanctl/priv/sunKey.pem
+    /etc/swanctl/private/sunKey.pem
 
     /etc/swanctl/swanctl.conf:
 
@@ -87,7 +87,7 @@ Configuration on gateway _sun_:
                         local_ts  = 10.2.0.0/16
                         remote_ts = 10.1.0.0/16
                         start_action = trap
-                   }
+                    }
                 }
             }
         }
@@ -116,11 +116,11 @@ connections we will use the default IPsec tunnel mode.
     | 192.168.0.1 | === | 192.168.0.2 |
          moon                sun
 
- Configuration on host _moon_:
+Configuration on host _moon_:
 
     /etc/swanctl/x509ca/strongswanCert.pem
     /etc/swanctl/x509/moonCert.pem
-    /etc/swanctl/priv/moonKey.pem
+    /etc/swanctl/private/moonKey.pem
 
     /etc/swanctl/swanctl.conf:
 
@@ -148,7 +148,7 @@ Configuration on host _sun_:
 
     /etc/swanctl/x509ca/strongswanCert.pem
     /etc/swanctl/x509/sunCert.pem
-    /etc/swanctl/priv/sunKey.pem
+    /etc/swanctl/private/sunKey.pem
 
     /etc/swanctl/swanctl.conf:
 
@@ -167,7 +167,7 @@ Configuration on host _sun_:
                 children {
                     host-host {
                         start_action = trap
-                   }
+                    }
                 }
             }
         }
@@ -185,7 +185,7 @@ Configuration on gateway _moon_:
 
     /etc/swanctl/x509ca/strongswanCert.pem
     /etc/swanctl/x509/moonCert.pem
-    /etc/swanctl/priv/moonKey.pem
+    /etc/swanctl/private/moonKey.pem
 
     /etc/swanctl/swanctl.conf:
 
@@ -211,11 +211,11 @@ Configuration on roadwarrior _carol_:
 
     /etc/swanctl/x509ca/strongswanCert.pem
     /etc/swanctl/x509/carolCert.pem
-    /etc/swanctl/priv/carolKey.pem
+    /etc/swanctl/private/carolKey.pem
 
     /etc/swanctl/swanctl.conf:
 
-         connections {
+        connections {
             home {
                 remote_addrs = moon.strongswan.org
 
@@ -277,7 +277,7 @@ Configuration on gateway _moon_:
 
     /etc/swanctl/x509ca/strongswanCert.pem
     /etc/swanctl/x509/moonCert.pem
-    /etc/swanctl/rsa/moonKey.pem
+    /etc/swanctl/private/moonKey.pem
 
     /etc/swanctl/swanctl.conf:
 
@@ -311,11 +311,11 @@ Configuration on roadwarrior _carol_:
 
     /etc/swanctl/x509ca/strongswanCert.pem
     /etc/swanctl/x509/carolCert.pem
-    /etc/swanctl/priv/carolKey.pem
+    /etc/swanctl/private/carolKey.pem
 
     /etc/swanctl/swanctl.conf:
 
-         connections {
+        connections {
             home {
                 remote_addrs = moon.strongswan.org
                 vips = 0.0.0.0
@@ -352,7 +352,7 @@ Configuration on gateway _moon_:
 
     /etc/swanctl/x509ca/strongswanCert.pem
     /etc/swanctl/x509/moonCert.pem
-    /etc/swanctl/priv/moonKey.pem
+    /etc/swanctl/private/moonKey.pem
 
     /etc/swanctl/swanctl.conf:
 
@@ -378,16 +378,16 @@ Configuration on gateway _moon_:
 The  `swanctl.conf` file additionally contains a `secrets` section defining all
 client credentials
 
-       secrets {
-           eap-carol {
-               id = carol@strongswan.org
-               secret = Ar3etTnp
-           }
-           eap-dave {
-               id = dave@strongswan.org
-               secret = W7R0g3do
-           }
-       }
+        secrets {
+            eap-carol {
+                id = carol@strongswan.org
+                secret = Ar3etTnp
+            }
+            eap-dave {
+                id = dave@strongswan.org
+                secret = W7R0g3do
+            }
+        }
 
 Configuration on roadwarrior _carol_:
 
@@ -395,7 +395,7 @@ Configuration on roadwarrior _carol_:
 
     /etc/swanctl/swanctl.conf:
 
-         connections {
+        connections {
             home {
                 remote_addrs = moon.strongswan.org
 
@@ -416,12 +416,12 @@ Configuration on roadwarrior _carol_:
             }
         }
 
-       secrets {
-           eap-carol {
-               id = carol@strongswan.org
-               secret = Ar3etTnp
-           }
-       }
+        secrets {
+            eap-carol {
+                id = carol@strongswan.org
+                secret = Ar3etTnp
+            }
+        }
 
 
 ### Roadwarrior Case with EAP Identity ###
@@ -437,7 +437,7 @@ Configuration on gateway _moon_:
 
     /etc/swanctl/x509ca/strongswanCert.pem
     /etc/swanctl/x509/moonCert.pem
-    /etc/swanctl/priv/moonKey.pem
+    /etc/swanctl/private/moonKey.pem
 
     /etc/swanctl/swanctl.conf:
 
@@ -461,16 +461,16 @@ Configuration on gateway _moon_:
             }
         }
 
-       secrets {
-           eap-carol {
-               id = carol
-               secret = Ar3etTnp
-           }
-           eap-dave {
-               id = dave
-               secret = W7R0g3do
-           }
-       }
+        secrets {
+            eap-carol {
+                id = carol
+                secret = Ar3etTnp
+            }
+            eap-dave {
+                id = dave
+                secret = W7R0g3do
+            }
+        }
 
 Configuration on roadwarrior _carol_:
 
@@ -478,7 +478,7 @@ Configuration on roadwarrior _carol_:
 
     /etc/swanctl/swanctl.conf:
 
-         connections {
+        connections {
             home {
                 remote_addrs = moon.strongswan.org
 
@@ -499,12 +499,12 @@ Configuration on roadwarrior _carol_:
             }
         }
 
-       secrets {
-           eap-carol {
-               id = carol
-               secret = Ar3etTnp
-           }
-       }
+        secrets {
+            eap-carol {
+                id = carol
+                secret = Ar3etTnp
+            }
+        }
 
 
 ## Generating Certificates and CRLs ##
@@ -571,7 +571,7 @@ In a next step the command
 
     pki --req --type priv --in moonKey.pem \
               --dn "C=CH, O=strongswan, CN=moon.strongswan.org \
-              --san moon.strongswan.org -- outform pem > moonReq.pem
+              --san moon.strongswan.org --outform pem > moonReq.pem
 
 creates a PKCS#10 certificate request that has to be signed by the CA.
 Through the [multiple] use of the `--san` parameter any number of desired

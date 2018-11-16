@@ -2,7 +2,7 @@
  * Copyright (C) 2012 Tobias Brunner
  * Copyright (C) 2005-2010 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -441,7 +441,7 @@ eap_payload_t *eap_payload_create_nak(uint8_t identifier, eap_type_t type,
 			added_any = TRUE;
 		}
 		else if (reg_vendor)
-		{	/* found vendor specifc method, but this is not an expanded Nak */
+		{	/* found vendor specific method, but this is not an expanded Nak */
 			found_vendor = TRUE;
 		}
 	}

@@ -2,7 +2,7 @@
  * Copyright (C) 2012-2014 Tobias Brunner
  * Copyright (C) 2005-2010 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -1360,10 +1360,10 @@ static void set_from_proposal_v1(private_proposal_substructure_t *this,
 	enumerator = proposal->create_enumerator(proposal, INTEGRITY_ALGORITHM);
 	if (enumerator->enumerate(enumerator, &alg, &key_size))
 	{
+		transid = get_ikev1_transid_from_alg(INTEGRITY_ALGORITHM, alg);
 		alg = get_ikev1_auth_from_alg(alg);
 		if (alg)
 		{
-			transid = get_ikev1_transid_from_alg(INTEGRITY_ALGORITHM, alg);
 			if (!transform && transid)
 			{
 				transform = transform_substructure_create_type(

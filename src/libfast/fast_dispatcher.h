@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,12 +24,12 @@
  *
  * The application has a global context and a session context. The global
  * context is accessed from all sessions simultaneously and therefore
- * needs to be threadsave. Often a database wrapper is the global context.
- * The session context is instanciated per session. Sessions are managed
+ * needs to be threadsafe. Often a database wrapper is the global context.
+ * The session context is instantiated per session. Sessions are managed
  * automatically through session cookies. The session context is kept alive
  * until the session times out. It must implement the context_t interface and
  * a #fast_context_constructor_t is needed to create instances. To each session,
- * a set of controllers gets instanciated. The controller instances are per
+ * a set of controllers gets instantiated. The controller instances are per
  * session, so you can hold private data for each user.
  * Controllers need to implement the controller_t interface and need a
  * #fast_controller_constructor_t function to create instances.
@@ -72,7 +72,7 @@ typedef struct fast_dispatcher_t fast_dispatcher_t;
  *
  * The dispatcher creates a session for each client (using SID cookies). In
  * each session, a session context is created using the context constructor.
- * Each controller is instanciated in the session using the controller
+ * Each controller is instantiated in the session using the controller
  * constructor added with add_controller.
  */
 struct fast_dispatcher_t {
@@ -83,7 +83,7 @@ struct fast_dispatcher_t {
 	 * The first controller added serves as default controller. Client's
 	 * get redirected to it if no other controller matches.
 	 *
-	 * @param constructor	constructor function to the conntroller
+	 * @param constructor	constructor function to the controller
 	 * @param param			param to pass to constructor
 	 */
 	void (*add_controller)(fast_dispatcher_t *this,
@@ -102,7 +102,7 @@ struct fast_dispatcher_t {
 	/**
 	 * Start with dispatching.
 	 *
-	 * Instanciate a constant thread pool and start dispatching requests.
+	 * Instantiate a constant thread pool and start dispatching requests.
 	 *
 	 * @param threads		number of dispatching threads
 	 */

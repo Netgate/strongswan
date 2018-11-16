@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008 Martin Willi
  * Copyright (C) 2007 Andreas Steffen
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -58,6 +58,11 @@ struct private_curl_fetcher_t {
 	 * Timeout for a transfer
 	 */
 	long timeout;
+
+	/**
+	 * Maximum number of redirects to follow
+	 */
+	long redir;
 };
 
 /**
@@ -85,7 +90,7 @@ static size_t curl_cb(void *ptr, size_t size, size_t nmemb, cb_data_t *data)
 METHOD(fetcher_t, fetch, status_t,
 	private_curl_fetcher_t *this, char *uri, void *userdata)
 {
-	char error[CURL_ERROR_SIZE], *enc_uri;
+	char error[CURL_ERROR_SIZE], *enc_uri, *p1, *p2;
 	CURLcode curl_status;
 	status_t status;
 	long result = 0;
@@ -116,6 +121,8 @@ METHOD(fetcher_t, fetch, status_t,
 		curl_easy_setopt(this->curl, CURLOPT_TIMEOUT, this->timeout);
 	}
 	curl_easy_setopt(this->curl, CURLOPT_CONNECTTIMEOUT, CONNECT_TIMEOUT);
+	curl_easy_setopt(this->curl, CURLOPT_FOLLOWLOCATION, TRUE);
+	curl_easy_setopt(this->curl, CURLOPT_MAXREDIRS, this->redir);
 	curl_easy_setopt(this->curl, CURLOPT_WRITEFUNCTION, (void*)curl_cb);
 	curl_easy_setopt(this->curl, CURLOPT_WRITEDATA, &data);
 	if (this->headers)
@@ -123,7 +130,17 @@ METHOD(fetcher_t, fetch, status_t,
 		curl_easy_setopt(this->curl, CURLOPT_HTTPHEADER, this->headers);
 	}
 
-	DBG2(DBG_LIB, "  sending request to '%s'...", uri);
+	/* if the URI contains a username[:password] prefix then mask it */
+	p1 = strstr(uri, "://");
+	p2 = strchr(uri, '@');
+	if (p1 && p2)
+	{
+		DBG2(DBG_LIB, "  sending request to '%.*sxxxx%s'...", p1+3-uri, uri, p2);
+	}
+	else
+	{
+		DBG2(DBG_LIB, "  sending request to '%s'...", uri);
+	}
 	curl_status = curl_easy_perform(this->curl);
 	switch (curl_status)
 	{
@@ -250,6 +267,8 @@ curl_fetcher_t *curl_fetcher_create()
 		},
 		.curl = curl_easy_init(),
 		.cb = fetcher_default_callback,
+		.redir = lib->settings->get_int(lib->settings, "%s.plugins.curl.redir",
+										-1, lib->ns),
 	);
 
 	if (!this->curl)

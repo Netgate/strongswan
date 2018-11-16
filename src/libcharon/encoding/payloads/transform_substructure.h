@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005-2006 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -32,7 +32,7 @@ typedef struct transform_substructure_t transform_substructure_t;
 #include <crypto/signers/signer.h>
 #include <crypto/prfs/prf.h>
 #include <crypto/crypters/crypter.h>
-#include <config/proposal.h>
+#include <crypto/proposal/proposal.h>
 
 /**
  * IKEv1 Value for a transform payload.
@@ -107,7 +107,7 @@ transform_substructure_t *transform_substructure_create(payload_type_t type);
  *
  * @param type				PLV2_TRANSFORM_SUBSTRUCTURE or PLV1_TRANSFORM_SUBSTRUCTURE
  * @param type_or_number	Type (IKEv2) or number (IKEv1) of transform
- * @param id				transform id specifc for the transform type
+ * @param id				transform id specific for the transform type
  * @return					transform_substructure_t object
  */
 transform_substructure_t *transform_substructure_create_type(payload_type_t type,

@@ -31,7 +31,7 @@ charon.cert_cache = yes
 	memory.
 
 charon.cache_crls = no
-	Whether Certicate Revocation Lists (CRLs) fetched via HTTP or LDAP should
+	Whether Certificate Revocation Lists (CRLs) fetched via HTTP or LDAP should
 	be saved under a unique file name derived from the public key of the
 	Certification Authority (CA) to **/etc/ipsec.d/crls** (stroke) or
 	**/etc/swanctl/x509crl** (vici), respectively.
@@ -52,7 +52,7 @@ charon.crypto_test.bench_size = 1024
 	Buffer size used for crypto benchmark.
 
 charon.crypto_test.bench_time = 50
-	Number of iterations to test each algorithm.
+	Time in ms during which crypto algorithm performance is measured.
 
 charon.crypto_test.on_add = no
 	Test crypto algorithms during registration (requires test vectors provided
@@ -271,7 +271,7 @@ charon.port_nat_t = 4500
 	port will be allocated.
 
 charon.prefer_best_path = no
-	Wether to prefer updating SAs to the path with the best route.
+	Whether to prefer updating SAs to the path with the best route.
 
 	By default, charon keeps SAs on the routing path with addresses it
 	previously used if that path is still usable. By setting this option to
@@ -340,6 +340,9 @@ charon.routing_table
 
 charon.routing_table_prio
 	Priority of the routing table.
+
+charon.rsa_pss = no
+	Whether to use RSA with PSS padding instead of PKCS#1 padding by default.
 
 charon.send_delay = 0
 	Delay in ms for sending packets, to simulate larger RTT.

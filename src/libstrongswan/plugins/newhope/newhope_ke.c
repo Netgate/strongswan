@@ -246,7 +246,7 @@ static uint32_t* multiply_ntt_inv_poly(private_newhope_ke_t *this, uint32_t *b)
 }
 
 /**
- * Pack four 2-bit coefficents into one byte
+ * Pack four 2-bit coefficients into one byte
  */
 static void pack_rec(private_newhope_ke_t *this, uint8_t *x, uint8_t *r)
 {
@@ -306,7 +306,7 @@ METHOD(diffie_hellman_t, get_my_public_value, bool,
 		rng = lib->crypto->create_rng(lib->crypto, RNG_STRONG);
 		if (!rng)
 		{
-			DBG1(DBG_LIB, "could not instatiate random source");
+			DBG1(DBG_LIB, "could not instantiate random source");
 			return FALSE;
 		}
 		if (!rng->get_bytes(rng, seed_len, a_seed.ptr))
@@ -463,7 +463,7 @@ METHOD(diffie_hellman_t, set_other_public_value, bool,
 		rng = lib->crypto->create_rng(lib->crypto, RNG_STRONG);
 		if (!rng)
 		{
-			DBG1(DBG_LIB, "could not instatiate random source");
+			DBG1(DBG_LIB, "could not instantiate random source");
 			goto end;
 		}
 		if (!rng->get_bytes(rng, seed_len, noise_seed.ptr))

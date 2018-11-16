@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -43,8 +43,10 @@ METHOD(plugin_t, get_features, int,
 	private_kernel_netlink_plugin_t *this, plugin_feature_t *features[])
 {
 	static plugin_feature_t f[] = {
+/*
 		PLUGIN_CALLBACK(kernel_ipsec_register, kernel_netlink_ipsec_create),
 			PLUGIN_PROVIDE(CUSTOM, "kernel-ipsec"),
+*/
 		PLUGIN_CALLBACK(kernel_net_register, kernel_netlink_net_create),
 			PLUGIN_PROVIDE(CUSTOM, "kernel-net"),
 	};

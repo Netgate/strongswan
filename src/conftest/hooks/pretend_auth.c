@@ -237,14 +237,14 @@ static bool build_auth(private_pretend_auth_t *this,
 			return FALSE;
 	}
 	keymat = (keymat_v2_t*)ike_sa->get_keymat(ike_sa);
-	if (!keymat->get_auth_octets(keymat, TRUE, this->ike_init,
-								 this->nonce, this->id, this->reserved,
+	if (!keymat->get_auth_octets(keymat, TRUE, this->ike_init, this->nonce,
+								 chunk_empty, this->id, this->reserved,
 								 &octets, NULL))
 	{
 		private->destroy(private);
 		return FALSE;
 	}
-	if (!private->sign(private, scheme, octets, &auth_data))
+	if (!private->sign(private, scheme, NULL, octets, &auth_data))
 	{
 		chunk_free(&octets);
 		private->destroy(private);

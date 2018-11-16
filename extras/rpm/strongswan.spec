@@ -37,7 +37,7 @@ Requires(postun): systemd
 BuildRequires: vpp-devel
 %else
 %define vpp_includedir %{vpp_dir}/build-root/install-vpp-native/vpp/include
-%define vpp_libdir %{vpp_dir}/build-root/install-vpp-native/vpp/lib64
+%define vpp_libdir %{vpp_dir}/build-root/install-vpp-native/vpp/lib
 %define custom_vpp_cppflags -I%{vpp_includedir}
 %define custom_vpp_ldflags -L%{vpp_libdir}
 %endif
@@ -275,6 +275,8 @@ done
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-acert.so
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-vici.so
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-curve25519.so
+%{_libdir}/%{real_name}/plugins/lib%{real_name}-counters.so
+%{_libdir}/%{real_name}/plugins/lib%{real_name}-mgf1.so
 %dir %{_libexecdir}/%{real_name}
 %{_libexecdir}/%{real_name}/_copyright
 %{_libexecdir}/%{real_name}/_updown
@@ -306,12 +308,10 @@ done
 %{_libdir}/%{real_name}/imcvs/imc-scanner.so
 %{_libdir}/%{real_name}/imcvs/imc-test.so
 %{_libdir}/%{real_name}/imcvs/imc-os.so
-%{_libdir}/%{real_name}/imcvs/imc-swid.so
-%{_libdir}/%{real_name}/imcvs/imv-attestation.so
 %{_libdir}/%{real_name}/imcvs/imv-scanner.so
 %{_libdir}/%{real_name}/imcvs/imv-test.so
 %{_libdir}/%{real_name}/imcvs/imv-os.so
-%{_libdir}/%{real_name}/imcvs/imv-swid.so
+%{_libdir}/%{real_name}/imcvs/imv-attestation.so
 %dir %{_libdir}/%{real_name}/plugins
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-pkcs7.so
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-sqlite.so
@@ -327,12 +327,7 @@ done
 #%{_libdir}/%{real_name}/plugins/lib%{real_name}-tnc-pdp.so
 %dir %{_libexecdir}/%{real_name}
 %{_libexecdir}/%{real_name}/attest
-%{_libexecdir}/%{real_name}/pacman
 %{_libexecdir}/%{real_name}/pt-tls-client
-#swid files
-%{_libexecdir}/%{real_name}/*.swidtag
-%dir %{_datadir}/regid.2004-03.org.%{real_name}
-%{_datadir}/regid.2004-03.org.%{real_name}/*.swidtag
 
 %files kernel-vpp
 %config(noreplace) %{_sysconfdir}/%{real_name}/strongswan.d/charon/kernel-vpp.conf

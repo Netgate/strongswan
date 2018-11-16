@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -65,6 +65,7 @@ int keymat_get_keylen_encr(encryption_algorithm_t alg)
 	keylen_entry_t map[] = {
 		{ENCR_DES,					 64},
 		{ENCR_3DES,					192},
+		{ENCR_CHACHA20_POLY1305,	256},
 	};
 	int i;
 

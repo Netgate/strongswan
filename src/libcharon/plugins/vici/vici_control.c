@@ -225,6 +225,7 @@ CALLBACK(terminate, vici_message_t*,
 	enumerator_t *enumerator, *isas, *csas;
 	char *child, *ike, *errmsg = NULL;
 	u_int child_id, ike_id, current, *del, done = 0;
+	bool force;
 	int timeout;
 	ike_sa_t *ike_sa;
 	child_sa_t *child_sa;
@@ -240,6 +241,7 @@ CALLBACK(terminate, vici_message_t*,
 	ike = request->get_str(request, NULL, "ike");
 	child_id = request->get_int(request, 0, "child-id");
 	ike_id = request->get_int(request, 0, "ike-id");
+	force = request->get_bool(request, FALSE, "force");
 	timeout = request->get_int(request, 0, "timeout");
 	log.level = request->get_int(request, 1, "loglevel");
 
@@ -326,7 +328,7 @@ CALLBACK(terminate, vici_message_t*,
 		}
 		else
 		{
-			if (charon->controller->terminate_ike(charon->controller, *del,
+			if (charon->controller->terminate_ike(charon->controller, *del, force,
 											log_cb, &log, timeout) == SUCCESS)
 			{
 				done++;
@@ -371,11 +373,13 @@ CALLBACK(rekey, vici_message_t*,
 	ike_sa_t *ike_sa;
 	child_sa_t *child_sa;
 	vici_builder_t *builder;
+	bool reauth;
 
 	child = request->get_str(request, NULL, "child");
 	ike = request->get_str(request, NULL, "ike");
 	child_id = request->get_int(request, 0, "child-id");
 	ike_id = request->get_int(request, 0, "ike-id");
+	reauth = request->get_bool(request, FALSE, "reauth");
 
 	if (!child && !ike && !ike_id && !child_id)
 	{
@@ -436,7 +440,7 @@ CALLBACK(rekey, vici_message_t*,
 				 (ike_id && ike_id == ike_sa->get_unique_id(ike_sa)))
 		{
 			lib->processor->queue_job(lib->processor,
-				(job_t*)rekey_ike_sa_job_create(ike_sa->get_id(ike_sa), FALSE));
+				(job_t*)rekey_ike_sa_job_create(ike_sa->get_id(ike_sa), reauth));
 			found++;
 		}
 	}
@@ -601,41 +605,6 @@ CALLBACK(redirect, vici_message_t*,
 	return builder->finalize(builder);
 }
 
-/**
- * Find reqid of an existing CHILD_SA
- */
-static uint32_t find_reqid(child_cfg_t *cfg)
-{
-	enumerator_t *enumerator, *children;
-	child_sa_t *child_sa;
-	ike_sa_t *ike_sa;
-	uint32_t reqid;
-
-	reqid = charon->traps->find_reqid(charon->traps, cfg);
-	if (reqid)
-	{	/* already trapped */
-		return reqid;
-	}
-
-	enumerator = charon->controller->create_ike_sa_enumerator(
-													charon->controller, TRUE);
-	while (!reqid && enumerator->enumerate(enumerator, &ike_sa))
-	{
-		children = ike_sa->create_child_sa_enumerator(ike_sa);
-		while (children->enumerate(children, &child_sa))
-		{
-			if (streq(cfg->get_name(cfg), child_sa->get_name(child_sa)))
-			{
-				reqid = child_sa->get_reqid(child_sa);
-				break;
-			}
-		}
-		children->destroy(children);
-	}
-	enumerator->destroy(enumerator);
-	return reqid;
-}
-
 CALLBACK(install, vici_message_t*,
 	private_vici_control_t *this, char *name, u_int id, vici_message_t *request)
 {
@@ -666,8 +635,7 @@ CALLBACK(install, vici_message_t*,
 									peer_cfg->get_name(peer_cfg), child_cfg);
 			break;
 		default:
-			ok = charon->traps->install(charon->traps, peer_cfg, child_cfg,
-										find_reqid(child_cfg));
+			ok = charon->traps->install(charon->traps, peer_cfg, child_cfg);
 			break;
 	}
 	peer_cfg->destroy(peer_cfg);
@@ -679,12 +647,7 @@ CALLBACK(install, vici_message_t*,
 CALLBACK(uninstall, vici_message_t*,
 	private_vici_control_t *this, char *name, u_int id, vici_message_t *request)
 {
-	peer_cfg_t *peer_cfg;
-	child_cfg_t *child_cfg;
-	child_sa_t *child_sa;
-	enumerator_t *enumerator;
-	uint32_t reqid = 0;
-	char *child, *ike, *ns;
+	char *child, *ike;
 
 	child = request->get_str(request, NULL, "child");
 	ike = request->get_str(request, NULL, "ike");
@@ -695,53 +658,13 @@ CALLBACK(uninstall, vici_message_t*,
 
 	DBG1(DBG_CFG, "vici uninstall '%s'", child);
 
-	if (!ike)
-	{
-		enumerator = charon->shunts->create_enumerator(charon->shunts);
-		while (enumerator->enumerate(enumerator, &ns, &child_cfg))
-		{
-			if (ns && streq(child, child_cfg->get_name(child_cfg)))
-			{
-				ike = strdup(ns);
-				break;
-			}
-		}
-		enumerator->destroy(enumerator);
-		if (ike)
-		{
-			if (charon->shunts->uninstall(charon->shunts, ike, child))
-			{
-				free(ike);
-				return send_reply(this, NULL);
-			}
-			free(ike);
-			return send_reply(this, "uninstalling policy '%s' failed", child);
-		}
-	}
-	else if (charon->shunts->uninstall(charon->shunts, ike, child))
+	if (charon->shunts->uninstall(charon->shunts, ike, child))
 	{
 		return send_reply(this, NULL);
 	}
-
-	enumerator = charon->traps->create_enumerator(charon->traps);
-	while (enumerator->enumerate(enumerator, &peer_cfg, &child_sa))
+	else if (charon->traps->uninstall(charon->traps, ike, child))
 	{
-		if ((!ike || streq(ike, peer_cfg->get_name(peer_cfg))) &&
-			streq(child, child_sa->get_name(child_sa)))
-		{
-			reqid = child_sa->get_reqid(child_sa);
-			break;
-		}
-	}
-	enumerator->destroy(enumerator);
-
-	if (reqid)
-	{
-		if (charon->traps->uninstall(charon->traps, reqid))
-		{
-			return send_reply(this, NULL);
-		}
-		return send_reply(this, "uninstalling policy '%s' failed", child);
+		return send_reply(this, NULL);
 	}
 	return send_reply(this, "policy '%s' not found", child);
 }

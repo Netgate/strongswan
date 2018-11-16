@@ -2,7 +2,7 @@
  * Copyright (C) 2012 Tobias Brunner
  * Copyright (C) 2005-2006 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -29,7 +29,7 @@ typedef struct proposal_substructure_t proposal_substructure_t;
 #include <library.h>
 #include <encoding/payloads/payload.h>
 #include <encoding/payloads/transform_substructure.h>
-#include <config/proposal.h>
+#include <crypto/proposal/proposal.h>
 #include <collections/linked_list.h>
 #include <kernel/kernel_ipsec.h>
 #include <sa/authenticator.h>

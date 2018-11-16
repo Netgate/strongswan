@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011-2012 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2011 Martin Willi
  * Copyright (C) 2011 revosec AG
@@ -221,8 +221,7 @@ static void add_initial_contact(private_main_mode_t *this, message_t *message,
 	idr = this->ph1->get_id(this->ph1, this->peer_cfg, FALSE);
 	if (idr && !idr->contains_wildcards(idr))
 	{
-		if (this->peer_cfg->get_unique_policy(this->peer_cfg) != UNIQUE_NO &&
-			this->peer_cfg->get_unique_policy(this->peer_cfg) != UNIQUE_NEVER)
+		if (this->peer_cfg->get_unique_policy(this->peer_cfg) != UNIQUE_NEVER)
 		{
 			host = this->ike_sa->get_other_host(this->ike_sa);
 			if (!charon->ike_sa_manager->has_contact(charon->ike_sa_manager,
@@ -333,11 +332,6 @@ METHOD(task_t, build_i, status_t,
 			identification_t *id;
 
 			id = this->ph1->get_id(this->ph1, this->peer_cfg, TRUE);
-			if (!id)
-			{
-				DBG1(DBG_CFG, "own identity not known");
-				return send_notify(this, INVALID_ID_INFORMATION);
-			}
 			this->ike_sa->set_my_id(this->ike_sa, id->clone(id));
 			id_payload = id_payload_create_from_identification(PLV1_ID, id);
 			message->add_payload(message, &id_payload->payload_interface);
@@ -345,6 +339,7 @@ METHOD(task_t, build_i, status_t,
 			if (!this->ph1->build_auth(this->ph1, this->method, message,
 									   id_payload->get_encoded(id_payload)))
 			{
+				charon->bus->alert(charon->bus, ALERT_LOCAL_AUTH_FAILED);
 				return send_notify(this, AUTHENTICATION_FAILED);
 			}
 
@@ -446,6 +441,7 @@ METHOD(task_t, process_r, status_t,
 			if (!id_payload)
 			{
 				DBG1(DBG_IKE, "IDii payload missing");
+				charon->bus->alert(charon->bus, ALERT_PEER_AUTH_FAILED);
 				return send_notify(this, INVALID_PAYLOAD_TYPE);
 			}
 			id = id_payload->get_identification(id_payload);
@@ -458,6 +454,7 @@ METHOD(task_t, process_r, status_t,
 													this->method, FALSE, id);
 				if (!this->peer_cfg)
 				{
+					charon->bus->alert(charon->bus, ALERT_PEER_AUTH_FAILED);
 					return send_notify(this, AUTHENTICATION_FAILED);
 				}
 				this->ike_sa->set_peer_cfg(this->ike_sa, this->peer_cfg);
@@ -473,6 +470,7 @@ METHOD(task_t, process_r, status_t,
 			{
 				DBG1(DBG_IKE, "Main Mode authorization hook forbids IKE_SA, "
 					 "cancelling");
+				charon->bus->alert(charon->bus, ALERT_PEER_AUTH_FAILED);
 				return send_notify(this, AUTHENTICATION_FAILED);
 			}
 
@@ -524,11 +522,6 @@ METHOD(task_t, build_r, status_t,
 			xauth_t *xauth = NULL;
 
 			id = this->ph1->get_id(this->ph1, this->peer_cfg, TRUE);
-			if (!id)
-			{
-				DBG1(DBG_CFG, "own identity not known");
-				return send_notify(this, INVALID_ID_INFORMATION);
-			}
 			this->ike_sa->set_my_id(this->ike_sa, id->clone(id));
 
 			id_payload = id_payload_create_from_identification(PLV1_ID, id);
@@ -537,6 +530,7 @@ METHOD(task_t, build_r, status_t,
 			if (!this->ph1->build_auth(this->ph1, this->method, message,
 									   id_payload->get_encoded(id_payload)))
 			{
+				charon->bus->alert(charon->bus, ALERT_LOCAL_AUTH_FAILED);
 				return send_notify(this, AUTHENTICATION_FAILED);
 			}
 
@@ -563,6 +557,7 @@ METHOD(task_t, build_r, status_t,
 					}
 					if (!establish(this))
 					{
+						charon->bus->alert(charon->bus, ALERT_PEER_AUTH_FAILED);
 						return send_notify(this, AUTHENTICATION_FAILED);
 					}
 					job = adopt_children_job_create(
@@ -689,6 +684,7 @@ METHOD(task_t, process_i, status_t,
 			if (!id_payload)
 			{
 				DBG1(DBG_IKE, "IDir payload missing");
+				charon->bus->alert(charon->bus, ALERT_PEER_AUTH_FAILED);
 				return send_delete(this);
 			}
 			id = id_payload->get_identification(id_payload);
@@ -697,6 +693,7 @@ METHOD(task_t, process_i, status_t,
 			{
 				DBG1(DBG_IKE, "IDir '%Y' does not match to '%Y'", id, cid);
 				id->destroy(id);
+				charon->bus->alert(charon->bus, ALERT_PEER_AUTH_FAILED);
 				return send_delete(this);
 			}
 			this->ike_sa->set_other_id(this->ike_sa, id);
@@ -704,12 +701,14 @@ METHOD(task_t, process_i, status_t,
 			if (!this->ph1->verify_auth(this->ph1, this->method, message,
 										id_payload->get_encoded(id_payload)))
 			{
+				charon->bus->alert(charon->bus, ALERT_PEER_AUTH_FAILED);
 				return send_delete(this);
 			}
 			if (!charon->bus->authorize(charon->bus, FALSE))
 			{
 				DBG1(DBG_IKE, "Main Mode authorization hook forbids IKE_SA, "
 					 "cancelling");
+				charon->bus->alert(charon->bus, ALERT_PEER_AUTH_FAILED);
 				return send_delete(this);
 			}
 
@@ -737,6 +736,7 @@ METHOD(task_t, process_i, status_t,
 					}
 					if (!establish(this))
 					{
+						charon->bus->alert(charon->bus, ALERT_PEER_AUTH_FAILED);
 						return send_delete(this);
 					}
 					break;

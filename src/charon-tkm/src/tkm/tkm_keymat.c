@@ -1,8 +1,8 @@
 /*
  * Copyright (C) 2015 Tobias Brunner
- * Copyrigth (C) 2012 Reto Buerki
+ * Copyright (C) 2012 Reto Buerki
  * Copyright (C) 2012 Adrian-Ken Rueegsegger
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -279,8 +279,15 @@ METHOD(keymat_v2_t, derive_ike_keys, bool,
 		}
 		isa_info = *((isa_info_t *)(rekey_skd.ptr));
 		DBG1(DBG_IKE, "deriving IKE keys (parent_isa: %llu, ae: %llu, nc: %llu,"
-			 "dh: %llu, spi_loc: %llx, spi_rem: %llx)", isa_info.parent_isa_id,
+			 " dh: %llu, spi_loc: %llx, spi_rem: %llx)", isa_info.parent_isa_id,
 			 isa_info.ae_id, nc_id, dh_id, spi_loc, spi_rem);
+
+		if (!tkm->idmgr->acquire_ref(tkm->idmgr, TKM_CTX_AE, isa_info.ae_id))
+		{
+			DBG1(DBG_IKE, "unable to acquire reference for ae: %llu",
+				 isa_info.ae_id);
+			return FALSE;
+		}
 		this->ae_ctx_id = isa_info.ae_id;
 		res = ike_isa_create_child(this->isa_ctx_id, isa_info.parent_isa_id, 1,
 								   dh_id, nc_id, nonce_rem, this->initiator,
@@ -378,8 +385,8 @@ METHOD(keymat_t, get_aead, aead_t*,
 
 METHOD(keymat_v2_t, get_auth_octets, bool,
 	private_tkm_keymat_t *this, bool verify, chunk_t ike_sa_init,
-	chunk_t nonce, identification_t *id, char reserved[3], chunk_t *octets,
-	array_t *schemes)
+	chunk_t nonce, chunk_t ppk, identification_t *id, char reserved[3],
+	chunk_t *octets, array_t *schemes)
 {
 	sign_info_t *sign;
 
@@ -416,17 +423,13 @@ METHOD(keymat_v2_t, get_skd, pseudo_random_function_t,
 
 	*skd = chunk_create((u_char *)isa_info, sizeof(isa_info_t));
 
-	/*
-	 * remove ae context id, since control has now been handed over to the new
-	 * IKE SA keymat
-	 */
-	this->ae_ctx_id = 0;
 	return PRF_HMAC_SHA2_512;
 }
 
 METHOD(keymat_v2_t, get_psk_sig, bool,
 	private_tkm_keymat_t *this, bool verify, chunk_t ike_sa_init, chunk_t nonce,
-	chunk_t secret, identification_t *id, char reserved[3], chunk_t *sig)
+	chunk_t secret, chunk_t ppk, identification_t *id, char reserved[3],
+	chunk_t *sig)
 {
 	return FALSE;
 }
@@ -462,11 +465,12 @@ METHOD(keymat_t, destroy, void,
 	/* only reset ae context if set */
 	if (this->ae_ctx_id != 0)
 	{
-		if (ike_ae_reset(this->ae_ctx_id) != TKM_OK)
+		int count;
+		count = tkm->idmgr->release_id(tkm->idmgr, TKM_CTX_AE, this->ae_ctx_id);
+		if (count == 0 && ike_ae_reset(this->ae_ctx_id) != TKM_OK)
 		{
 			DBG1(DBG_IKE, "failed to reset AE context %d", this->ae_ctx_id);
 		}
-		tkm->idmgr->release_id(tkm->idmgr, TKM_CTX_AE, this->ae_ctx_id);
 	}
 
 	DESTROY_IF(this->hash_algorithms);
@@ -519,6 +523,7 @@ tkm_keymat_t *tkm_keymat_create(bool initiator)
 					.destroy = _destroy,
 				},
 				.derive_ike_keys = _derive_ike_keys,
+				.derive_ike_keys_ppk = (void*)return_false,
 				.derive_child_keys = _derive_child_keys,
 				.get_skd = _get_skd,
 				.get_auth_octets = _get_auth_octets,

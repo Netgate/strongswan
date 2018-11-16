@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -118,7 +118,7 @@ public class SettingsWriter
 	 */
 	private String escapeValue(String value)
 	{
-		return value.replace("\"", "\\\"");
+		return value.replace("\\", "\\\\").replace("\"", "\\\"");
 	}
 
 	/**

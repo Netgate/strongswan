@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2014 Andreas Steffen
+ * Copyright (C) 2011-2018 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -27,15 +27,24 @@ typedef enum pa_tnc_error_code_t pa_tnc_error_code_t;
 #include "ietf_attr.h"
 #include "pa_tnc/pa_tnc_attr.h"
 
-
 /**
- * IETF Standard PA-TNC Error Codes as defined in section 4.2.8 of RFC 5792
+ * IETF Standard PA-TNC Error Codes
  */
 enum  pa_tnc_error_code_t {
-    PA_ERROR_RESERVED =                 0,
-	PA_ERROR_INVALID_PARAMETER =        1,
-	PA_ERROR_VERSION_NOT_SUPPORTED =    2,
-	PA_ERROR_ATTR_TYPE_NOT_SUPPORTED =  3,
+
+	/* RFC 5792 PA-TNC */
+	PA_ERROR_RESERVED =                         0,
+	PA_ERROR_INVALID_PARAMETER =                1,
+	PA_ERROR_VERSION_NOT_SUPPORTED =            2,
+	PA_ERROR_ATTR_TYPE_NOT_SUPPORTED =          3,
+	PA_ERROR_PA_TNC_MSG_ROOF =                  3,
+
+	/* RFC 8412 SWIMA */
+	PA_ERROR_SWIMA =                            4,
+	PA_ERROR_SWIMA_SUBSCRIPTION_DENIED =        5,
+	PA_ERROR_SWIMA_RESPONSE_TOO_LARGE =         6,
+	PA_ERROR_SWIMA_SUBSCRIPTION_FULFILLMENT =   7,
+	PA_ERROR_SWIMA_SUBSCRIPTION_ID_REUSE =      8
 };
 
 /**

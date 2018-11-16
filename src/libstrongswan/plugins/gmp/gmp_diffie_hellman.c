@@ -4,7 +4,7 @@
  * Copyright (C) 2010 Tobias Brunner
  * Copyright (C) 2005-2008 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -272,7 +272,7 @@ static gmp_diffie_hellman_t *create_generic(diffie_hellman_group_t group,
 }
 
 /*
- * Described in header.
+ * Described in header
  */
 gmp_diffie_hellman_t *gmp_diffie_hellman_create(diffie_hellman_group_t group)
 {
@@ -287,12 +287,17 @@ gmp_diffie_hellman_t *gmp_diffie_hellman_create(diffie_hellman_group_t group)
 						  params->generator, params->prime);
 }
 
-
+/*
+ * Described in header
+ */
 gmp_diffie_hellman_t *gmp_diffie_hellman_create_custom(
-							diffie_hellman_group_t group, chunk_t g, chunk_t p)
+											diffie_hellman_group_t group, ...)
 {
 	if (group == MODP_CUSTOM)
 	{
+		chunk_t g, p;
+
+		VA_ARGS_GET(group, g, p);
 		return create_generic(MODP_CUSTOM, p.len, g, p);
 	}
 	return NULL;

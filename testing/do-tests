@@ -49,6 +49,25 @@ passed_cnt="0"
 subdir_cnt="0"
 
 ##############################################################################
+# parse optional arguments
+#
+while getopts "v" opt
+do
+	case "$opt" in
+	v)
+		verbose=YES
+		;;
+	esac
+done
+shift $((OPTIND-1))
+
+
+function print_time()
+{
+	[ "$verbose" == "YES" ] && echo "$(date +%T.%N) ~ "
+}
+
+##############################################################################
 # copy default tests to $BUILDDIR
 #
 
@@ -207,12 +226,16 @@ for SUBDIR in $TESTS
 do
     SUBTESTS="`basename $SUBDIR`"
 
-    if [ $SUBTESTS = $SUBDIR ]
-    then
-	SUBTESTS="`ls $DEFAULTTESTSDIR/$SUBDIR`"
-    else
-	SUBDIR="`dirname $SUBDIR`"
-    fi
+	if [ $SUBTESTS = $SUBDIR ]
+	then
+		SUBTESTS="`ls $DEFAULTTESTSDIR/$SUBDIR`"
+	else
+		if [[ $SUBTESTS == *'*'* ]]
+		then
+			SUBTESTS="`basename -a $DEFAULTTESTSDIR/$SUBDIR`"
+		fi
+		SUBDIR="`dirname $SUBDIR`"
+	fi
 
     if [ ! -d $TODAYDIR/$SUBDIR ]
     then
@@ -326,7 +349,7 @@ do
 		host=`echo $host_iface | awk -F ":" '{print $1}'`
 		iface=`echo $host_iface | awk -F ":" '{if ($2 != "") { print $2 } else { printf("eth0") }}'`
 		tcpdump_cmd="tcpdump -l $TCPDUMP_IM -i $iface not port ssh and not port domain >/tmp/tcpdump.log 2>/tmp/tcpdump.err.log &"
-		echo "${host}# $tcpdump_cmd" >> $CONSOLE_LOG
+		echo "$(print_time)${host}# $tcpdump_cmd" >> $CONSOLE_LOG
 		ssh $SSHCONF root@`eval echo \\\$ipv4_$host '$tcpdump_cmd'`
 		eval TDUP_${host}="true"
 	    done
@@ -381,7 +404,7 @@ do
 	eval `awk -F "::" '{
 	    if ($1 !~ /^#.*/ && $2 != "")
 	    {
-		printf("echo \"%s# %s\"; ", $1, $2)
+		printf("echo \"$(print_time)%s# %s\"; ", $1, $2)
 		printf("ssh \044SSHCONF root@\044ipv4_%s \"%s\"; ", $1, $2)
 		printf("echo;\n")
 	    }
@@ -395,7 +418,7 @@ do
 	function stop_tcpdump {
 	    # wait for packets to get processed, but don't wait longer than 1s
 	    eval ssh $SSHCONF root@\$ipv4_${1} "\"i=100; while [ \\\$i -gt 0 ]; do pkill -USR1 tcpdump; tail -1 /tmp/tcpdump.err.log | perl -n -e '/(\\d+).*?(\\d+)/; exit (\\\$1 == \\\$2)' || break; sleep 0.01; i=\\\$((\\\$i-1)); done;\""
-	    echo "${1}# killall tcpdump" >> $CONSOLE_LOG
+	    echo "$(print_time)${1}# killall tcpdump" >> $CONSOLE_LOG
 	    eval ssh $SSHCONF root@\$ipv4_${1} "\"killall tcpdump; while true; do killall -q -0 tcpdump || break; sleep 0.01; done;\""
 	    eval TDUP_${1}="false"
 	    echo "" >> $CONSOLE_LOG
@@ -412,29 +435,57 @@ do
 	STATUS="passed"
 
 	eval `awk -F "::" '{
-	    host=$1
-	    command=$2
-	    pattern=$3
-	    hit=$4
-	    if (host !~ /^#.*/ && command != "")
-	    {
+		host=$1
+		command=$2
+		pattern=$3
+		hit=$4
+		if (host ~ /^#.*/ || command == "")
+		{
+			next
+		}
+		printf("cmd_err=\044(tempfile -p test -s err); ")
+		printf("cmd_out=\044(tempfile -p test -s out); ")
 		if (command == "tcpdump")
 		{
-		    printf("if [ \044TDUP_%s == \"true\" ]; then stop_tcpdump %s; fi; \n", host, host)
-		    printf("echo \"%s# cat /tmp/tcpdump.log | grep \047%s\047  [%s]\"; ", host, pattern, hit)
-		    printf("ssh \044SSHCONF root@\044ipv4_%s cat /tmp/tcpdump.log | grep \"%s\"; ", host, pattern)
+			printf("if [ \044TDUP_%s == \"true\" ]; then stop_tcpdump %s; fi; \n", host, host)
+			printf("ssh \044SSHCONF root@\044ipv4_%s cat /tmp/tcpdump.log > \044cmd_out; ", host)
 		}
 		else
 		{
-		    printf("echo \"%s# %s | grep \047%s\047  [%s]\"; ", host, command, pattern, hit)
-		    printf("ssh \044SSHCONF root@\044ipv4_%s %s | grep \"%s\"; ",  host, command, pattern)
+			printf("ssh \044SSHCONF root@\044ipv4_%s %s >\044cmd_out 2>\044cmd_err; ",  host, command)
 		}
+		printf("cmd_res=\044(cat \044cmd_out | grep \"%s\"); ", pattern)
 		printf("cmd_exit=\044?; ")
+		printf("cmd_fail=0; ")
+		if (hit ~ /^[0-9]+$/)
+		{
+			printf("if [ \044(echo \"\044cmd_res\" | wc -l) -ne %d ] ", hit)
+		}
+		else
+		{
+			printf("if [ \044cmd_exit -eq 0 -a \"%s\" = \"NO\"  ] ", hit)
+			printf("|| [ \044cmd_exit -ne 0 -a \"%s\" = \"YES\" ] ", hit)
+		}
+		printf("; then STATUS=\"failed\"; cmd_fail=1; fi; \n")
+
+		printf("if [ \044cmd_fail -ne 0 ]; then echo \"~~~~~~~ FAIL ~~~~~~~\"; fi; \n")
+		if (command == "tcpdump")
+		{
+			printf("echo \"$(print_time)%s# cat /tmp/tcpdump.log | grep \047%s\047  [%s]\"; ", host, pattern, hit)
+		}
+		else
+		{
+			printf("echo \"$(print_time)%s# %s | grep \047%s\047  [%s]\"; ", host, command, pattern, hit)
+		}
+		printf("if [ -n \"\044cmd_res\" ]; then echo \"\044cmd_res\"; fi; \n")
+		printf("cat \044cmd_err; \n")
+		printf("if [ \044cmd_fail -ne 0 ]; then \n")
+		printf("if [ -s \044cmd_out ]; then echo \"~~ output ~~~~~~~~~~\"; \n")
+		printf("if [ \"\044verbose\" == \"YES\" ]; then cat \044cmd_out;\n")
+		printf("else cat \044cmd_out | head; fi; fi; \n")
+		printf("echo \"~~~~~~~~~~~~~~~~~~~~\"; fi; \n")
+		printf("rm -f -- \044cmd_out \044cmd_err; \n")
 		printf("echo; ")
-		printf("if [ \044cmd_exit -eq 0 -a \"%s\" = \"NO\"  ] ", hit)
-		printf("|| [ \044cmd_exit -ne 0 -a \"%s\" = \"YES\" ] ", hit)
-		printf("; then STATUS=\"failed\"; fi; \n")
-	    }
 	}' $TESTDIR/evaltest.dat` >> $CONSOLE_LOG 2>&1
 
 
@@ -718,7 +769,7 @@ do
 	eval `awk -F "::" '{
 	    if ($1 !~ /^#.*/ && $2 != "")
 	    {
-		printf("echo \"%s# %s\"; ", $1, $2)
+		printf("echo \"$(print_time)%s# %s\"; ", $1, $2)
 		printf("ssh \044SSHCONF root@\044ipv4_%s \"%s\"; ", $1, $2)
 		printf("echo;\n")
 	    }
@@ -732,8 +783,10 @@ do
 	do
 		eval HOSTLOGIN=root@\$ipv4_${host}
 		IPSECSTATE=`ssh $SSHCONF $HOSTLOGIN 'ip xfrm state'`
+		# ignore IPv4/v6 states created with IPComp SAs
+		IPSECSTATEISSUE=`echo "$IPSECSTATE" | grep 'proto.*spi' | grep -v 'proto 4'`
 		IPSECPOLICY=`ssh $SSHCONF $HOSTLOGIN 'ip xfrm policy'`
-		if [ -n "$IPSECSTATE" -o -n "$IPSECPOLICY" ]
+		if [ -n "$IPSECSTATEISSUE" -o -n "$IPSECPOLICY" ]
 		then
 			echo -e "\n$host# ip xfrm state [NO]" >> $CONSOLE_LOG
 			echo "$IPSECSTATE" >> $CONSOLE_LOG
@@ -781,7 +834,7 @@ do
 	for host in $IPSECHOSTS
 	do
 	    eval HOSTLOGIN=root@\$ipv4_${host}
-	    ssh $SSHCONF $HOSTLOGIN "grep -s -E 'charon|last message repeated|imcv' \
+	    ssh $SSHCONF $HOSTLOGIN "grep -s -E 'systemd|swanctl|charon|last message repeated|imcv' \
 		/var/log/daemon.log" >> $TESTRESULTDIR/${host}.daemon.log
 	done
 

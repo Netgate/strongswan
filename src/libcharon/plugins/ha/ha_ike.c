@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -335,7 +335,7 @@ METHOD(listener_t, message_hook, bool,
 		chunk_t iv;
 
 		/* we need the last block (or expected next IV) of Phase 1, which gets
-		 * upated after successful en-/decryption depending on direction */
+		 * updated after successful en-/decryption depending on direction */
 		if (incoming == plain)
 		{
 			if (message->get_message_id(message) == 0)

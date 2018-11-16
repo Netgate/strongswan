@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2016 Tobias Brunner
+ * Copyright (C) 2012-2018 Tobias Brunner
  * Copyright (C) 2012 Giuliano Grassi
  * Copyright (C) 2012 Ralf Sager
  * HSR Hochschule fuer Technik Rapperswil
@@ -17,10 +17,6 @@
 
 package org.strongswan.android.data;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
@@ -29,6 +25,10 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.util.Log;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 public class VpnProfileDataSource
 {
@@ -47,6 +47,14 @@ public class VpnProfileDataSource
 	public static final String KEY_SPLIT_TUNNELING = "split_tunneling";
 	public static final String KEY_LOCAL_ID = "local_id";
 	public static final String KEY_REMOTE_ID = "remote_id";
+	public static final String KEY_EXCLUDED_SUBNETS = "excluded_subnets";
+	public static final String KEY_INCLUDED_SUBNETS = "included_subnets";
+	public static final String KEY_SELECTED_APPS = "selected_apps";
+	public static final String KEY_SELECTED_APPS_LIST = "selected_apps_list";
+	public static final String KEY_NAT_KEEPALIVE = "nat_keepalive";
+	public static final String KEY_FLAGS = "flags";
+	public static final String KEY_IKE_PROPOSAL = "ike_proposal";
+	public static final String KEY_ESP_PROPOSAL = "esp_proposal";
 
 	private DatabaseHelper mDbHelper;
 	private SQLiteDatabase mDatabase;
@@ -55,41 +63,71 @@ public class VpnProfileDataSource
 	private static final String DATABASE_NAME = "strongswan.db";
 	private static final String TABLE_VPNPROFILE = "vpnprofile";
 
-	private static final int DATABASE_VERSION = 9;
+	private static final int DATABASE_VERSION = 16;
 
-	public static final String DATABASE_CREATE =
-							"CREATE TABLE " + TABLE_VPNPROFILE + " (" +
-								KEY_ID + " INTEGER PRIMARY KEY AUTOINCREMENT," +
-								KEY_UUID + " TEXT UNIQUE," +
-								KEY_NAME + " TEXT NOT NULL," +
-								KEY_GATEWAY + " TEXT NOT NULL," +
-								KEY_VPN_TYPE + " TEXT NOT NULL," +
-								KEY_USERNAME + " TEXT," +
-								KEY_PASSWORD + " TEXT," +
-								KEY_CERTIFICATE + " TEXT," +
-								KEY_USER_CERTIFICATE + " TEXT," +
-								KEY_MTU + " INTEGER," +
-								KEY_PORT + " INTEGER," +
-								KEY_SPLIT_TUNNELING + " INTEGER," +
-								KEY_LOCAL_ID + " TEXT," +
-								KEY_REMOTE_ID + " TEXT" +
-							");";
-	private static final String[] ALL_COLUMNS = new String[] {
-								KEY_ID,
-								KEY_UUID,
-								KEY_NAME,
-								KEY_GATEWAY,
-								KEY_VPN_TYPE,
-								KEY_USERNAME,
-								KEY_PASSWORD,
-								KEY_CERTIFICATE,
-								KEY_USER_CERTIFICATE,
-								KEY_MTU,
-								KEY_PORT,
-								KEY_SPLIT_TUNNELING,
-								KEY_LOCAL_ID,
-								KEY_REMOTE_ID,
+	public static final DbColumn[] COLUMNS = new DbColumn[] {
+								new DbColumn(KEY_ID, "INTEGER PRIMARY KEY AUTOINCREMENT", 1),
+								new DbColumn(KEY_UUID, "TEXT UNIQUE", 9),
+								new DbColumn(KEY_NAME, "TEXT NOT NULL", 1),
+								new DbColumn(KEY_GATEWAY, "TEXT NOT NULL", 1),
+								new DbColumn(KEY_VPN_TYPE, "TEXT NOT NULL", 3),
+								new DbColumn(KEY_USERNAME, "TEXT", 1),
+								new DbColumn(KEY_PASSWORD, "TEXT", 1),
+								new DbColumn(KEY_CERTIFICATE, "TEXT", 1),
+								new DbColumn(KEY_USER_CERTIFICATE, "TEXT", 2),
+								new DbColumn(KEY_MTU, "INTEGER", 5),
+								new DbColumn(KEY_PORT, "INTEGER", 5),
+								new DbColumn(KEY_SPLIT_TUNNELING, "INTEGER", 7),
+								new DbColumn(KEY_LOCAL_ID, "TEXT", 8),
+								new DbColumn(KEY_REMOTE_ID, "TEXT", 8),
+								new DbColumn(KEY_EXCLUDED_SUBNETS, "TEXT", 10),
+								new DbColumn(KEY_INCLUDED_SUBNETS, "TEXT", 11),
+								new DbColumn(KEY_SELECTED_APPS, "INTEGER", 12),
+								new DbColumn(KEY_SELECTED_APPS_LIST, "TEXT", 12),
+								new DbColumn(KEY_NAT_KEEPALIVE, "INTEGER", 13),
+								new DbColumn(KEY_FLAGS, "INTEGER", 14),
+								new DbColumn(KEY_IKE_PROPOSAL, "TEXT", 15),
+								new DbColumn(KEY_ESP_PROPOSAL, "TEXT", 15),
 							};
+
+	private static final String[] ALL_COLUMNS = getColumns(DATABASE_VERSION);
+
+	private static String getDatabaseCreate(int version)
+	{
+		boolean first = true;
+		StringBuilder create = new StringBuilder("CREATE TABLE ");
+		create.append(TABLE_VPNPROFILE);
+		create.append(" (");
+		for (DbColumn column : COLUMNS)
+		{
+			if (column.Since <= version)
+			{
+				if (!first)
+				{
+					create.append(",");
+				}
+				first = false;
+				create.append(column.Name);
+				create.append(" ");
+				create.append(column.Type);
+			}
+		}
+		create.append(");");
+		return create.toString();
+	}
+
+	private static String[] getColumns(int version)
+	{
+		ArrayList<String> columns = new ArrayList<>();
+		for (DbColumn column : COLUMNS)
+		{
+			if (column.Since <= version)
+			{
+				columns.add(column.Name);
+			}
+		}
+		return columns.toArray(new String[0]);
+	}
 
 	private static class DatabaseHelper extends SQLiteOpenHelper
 	{
@@ -101,7 +139,7 @@ public class VpnProfileDataSource
 		@Override
 		public void onCreate(SQLiteDatabase database)
 		{
-			database.execSQL(DATABASE_CREATE);
+			database.execSQL(getDatabaseCreate(DATABASE_VERSION));
 		}
 
 		@Override
@@ -121,7 +159,7 @@ public class VpnProfileDataSource
 			}
 			if (oldVersion < 4)
 			{	/* remove NOT NULL constraint from username column */
-				updateColumns(db);
+				updateColumns(db, 4);
 			}
 			if (oldVersion < 5)
 			{
@@ -149,19 +187,73 @@ public class VpnProfileDataSource
 			{
 				db.execSQL("ALTER TABLE " + TABLE_VPNPROFILE + " ADD " + KEY_UUID +
 						   " TEXT;");
-				updateColumns(db);
+				updateColumns(db, 9);
+			}
+			if (oldVersion < 10)
+			{
+				db.execSQL("ALTER TABLE " + TABLE_VPNPROFILE + " ADD " + KEY_EXCLUDED_SUBNETS +
+						   " TEXT;");
+			}
+			if (oldVersion < 11)
+			{
+				db.execSQL("ALTER TABLE " + TABLE_VPNPROFILE + " ADD " + KEY_INCLUDED_SUBNETS +
+						   " TEXT;");
+			}
+			if (oldVersion < 12)
+			{
+				db.execSQL("ALTER TABLE " + TABLE_VPNPROFILE + " ADD " + KEY_SELECTED_APPS +
+						   " INTEGER;");
+				db.execSQL("ALTER TABLE " + TABLE_VPNPROFILE + " ADD " + KEY_SELECTED_APPS_LIST +
+						   " TEXT;");
+			}
+			if (oldVersion < 13)
+			{
+				db.execSQL("ALTER TABLE " + TABLE_VPNPROFILE + " ADD " + KEY_NAT_KEEPALIVE +
+						   " INTEGER;");
+			}
+			if (oldVersion < 14)
+			{
+				db.execSQL("ALTER TABLE " + TABLE_VPNPROFILE + " ADD " + KEY_FLAGS +
+						   " INTEGER;");
+			}
+			if (oldVersion < 15)
+			{
+				db.execSQL("ALTER TABLE " + TABLE_VPNPROFILE + " ADD " + KEY_IKE_PROPOSAL +
+						   " TEXT;");
+				db.execSQL("ALTER TABLE " + TABLE_VPNPROFILE + " ADD " + KEY_ESP_PROPOSAL +
+						   " TEXT;");
+			}
+			if (oldVersion < 16)
+			{	/* add a UUID to all entries that haven't one yet */
+				db.beginTransaction();
+				try
+				{
+					Cursor cursor = db.query(TABLE_VPNPROFILE, ALL_COLUMNS, KEY_UUID + " is NULL", null, null, null, null);
+					for (cursor.moveToFirst(); !cursor.isAfterLast(); cursor.moveToNext())
+					{
+						ContentValues values = new ContentValues();
+						values.put(KEY_UUID, UUID.randomUUID().toString());
+						db.update(TABLE_VPNPROFILE, values, KEY_ID + " = " + cursor.getLong(cursor.getColumnIndex(KEY_ID)), null);
+					}
+					cursor.close();
+					db.setTransactionSuccessful();
+				}
+				finally
+				{
+					db.endTransaction();
+				}
 			}
 		}
 
-		private void updateColumns(SQLiteDatabase db)
+		private void updateColumns(SQLiteDatabase db, int version)
 		{
 			db.beginTransaction();
 			try
 			{
 				db.execSQL("ALTER TABLE " + TABLE_VPNPROFILE + " RENAME TO tmp_" + TABLE_VPNPROFILE + ";");
-				db.execSQL(DATABASE_CREATE);
+				db.execSQL(getDatabaseCreate(version));
 				StringBuilder insert = new StringBuilder("INSERT INTO " + TABLE_VPNPROFILE + " SELECT ");
-				SQLiteQueryBuilder.appendColumns(insert, ALL_COLUMNS);
+				SQLiteQueryBuilder.appendColumns(insert, getColumns(version));
 				db.execSQL(insert.append(" FROM tmp_" + TABLE_VPNPROFILE + ";").toString());
 				db.execSQL("DROP TABLE tmp_" + TABLE_VPNPROFILE + ";");
 				db.setTransactionSuccessful();
@@ -290,6 +382,28 @@ public class VpnProfileDataSource
 	}
 
 	/**
+	 * Get a single VPN profile from the database by its UUID as String.
+	 * @param uuid the UUID of the VPN profile as String
+	 * @return the profile or null, if not found
+	 */
+	public VpnProfile getVpnProfile(String uuid)
+	{
+		try
+		{
+			if (uuid != null)
+			{
+				return getVpnProfile(UUID.fromString(uuid));
+			}
+			return null;
+		}
+		catch (IllegalArgumentException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
+	}
+
+	/**
 	 * Get a list of all VPN profiles stored in the database.
 	 * @return list of VPN profiles
 	 */
@@ -313,7 +427,7 @@ public class VpnProfileDataSource
 	{
 		VpnProfile profile = new VpnProfile();
 		profile.setId(cursor.getLong(cursor.getColumnIndex(KEY_ID)));
-		profile.setUUID(getUUID(cursor, cursor.getColumnIndex(KEY_UUID)));
+		profile.setUUID(UUID.fromString(cursor.getString(cursor.getColumnIndex(KEY_UUID))));
 		profile.setName(cursor.getString(cursor.getColumnIndex(KEY_NAME)));
 		profile.setGateway(cursor.getString(cursor.getColumnIndex(KEY_GATEWAY)));
 		profile.setVpnType(VpnType.fromIdentifier(cursor.getString(cursor.getColumnIndex(KEY_VPN_TYPE))));
@@ -326,13 +440,21 @@ public class VpnProfileDataSource
 		profile.setSplitTunneling(getInt(cursor, cursor.getColumnIndex(KEY_SPLIT_TUNNELING)));
 		profile.setLocalId(cursor.getString(cursor.getColumnIndex(KEY_LOCAL_ID)));
 		profile.setRemoteId(cursor.getString(cursor.getColumnIndex(KEY_REMOTE_ID)));
+		profile.setExcludedSubnets(cursor.getString(cursor.getColumnIndex(KEY_EXCLUDED_SUBNETS)));
+		profile.setIncludedSubnets(cursor.getString(cursor.getColumnIndex(KEY_INCLUDED_SUBNETS)));
+		profile.setSelectedAppsHandling(getInt(cursor, cursor.getColumnIndex(KEY_SELECTED_APPS)));
+		profile.setSelectedApps(cursor.getString(cursor.getColumnIndex(KEY_SELECTED_APPS_LIST)));
+		profile.setNATKeepAlive(getInt(cursor, cursor.getColumnIndex(KEY_NAT_KEEPALIVE)));
+		profile.setFlags(getInt(cursor, cursor.getColumnIndex(KEY_FLAGS)));
+		profile.setIkeProposal(cursor.getString(cursor.getColumnIndex(KEY_IKE_PROPOSAL)));
+		profile.setEspProposal(cursor.getString(cursor.getColumnIndex(KEY_ESP_PROPOSAL)));
 		return profile;
 	}
 
 	private ContentValues ContentValuesFromVpnProfile(VpnProfile profile)
 	{
 		ContentValues values = new ContentValues();
-		values.put(KEY_UUID, profile.getUUID() != null ? profile.getUUID().toString() : null);
+		values.put(KEY_UUID, profile.getUUID().toString());
 		values.put(KEY_NAME, profile.getName());
 		values.put(KEY_GATEWAY, profile.getGateway());
 		values.put(KEY_VPN_TYPE, profile.getVpnType().getIdentifier());
@@ -345,6 +467,14 @@ public class VpnProfileDataSource
 		values.put(KEY_SPLIT_TUNNELING, profile.getSplitTunneling());
 		values.put(KEY_LOCAL_ID, profile.getLocalId());
 		values.put(KEY_REMOTE_ID, profile.getRemoteId());
+		values.put(KEY_EXCLUDED_SUBNETS, profile.getExcludedSubnets());
+		values.put(KEY_INCLUDED_SUBNETS, profile.getIncludedSubnets());
+		values.put(KEY_SELECTED_APPS, profile.getSelectedAppsHandling().getValue());
+		values.put(KEY_SELECTED_APPS_LIST, profile.getSelectedApps());
+		values.put(KEY_NAT_KEEPALIVE, profile.getNATKeepAlive());
+		values.put(KEY_FLAGS, profile.getFlags());
+		values.put(KEY_IKE_PROPOSAL, profile.getIkeProposal());
+		values.put(KEY_ESP_PROPOSAL, profile.getEspProposal());
 		return values;
 	}
 
@@ -353,15 +483,17 @@ public class VpnProfileDataSource
 		return cursor.isNull(columnIndex) ? null : cursor.getInt(columnIndex);
 	}
 
-	private UUID getUUID(Cursor cursor, int columnIndex)
+	private static class DbColumn
 	{
-		try
+		public final String Name;
+		public final String Type;
+		public final Integer Since;
+
+		public DbColumn(String name, String type, Integer since)
 		{
-			return cursor.isNull(columnIndex) ? null : UUID.fromString(cursor.getString(columnIndex));
-		}
-		catch (Exception e)
-		{
-			return null;
+			Name = name;
+			Type = type;
+			Since = since;
 		}
 	}
 }

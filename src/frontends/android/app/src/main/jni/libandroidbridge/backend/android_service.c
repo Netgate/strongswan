@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2016 Tobias Brunner
+ * Copyright (C) 2010-2018 Tobias Brunner
  * Copyright (C) 2012 Giuliano Grassi
  * Copyright (C) 2012 Ralf Sager
  * HSR Hochschule fuer Technik Rapperswil
@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include "android_jni.h"
 #include "android_service.h"
 #include "android_dns_proxy.h"
 #include "../charonservice.h"
@@ -53,7 +54,7 @@ struct private_android_service_t {
 	ike_sa_t *ike_sa;
 
 	/**
-	 * configuration setttings
+	 * configuration settings
 	 */
 	settings_t *settings;
 
@@ -401,7 +402,7 @@ static void close_tun_device(private_android_service_t *this)
 CALLBACK(terminate, job_requeue_t,
 	uint32_t *id)
 {
-	charon->controller->terminate_ike(charon->controller, *id,
+	charon->controller->terminate_ike(charon->controller, *id, FALSE,
 									  controller_cb_empty, NULL, 0);
 	return JOB_REQUEUE_NONE;
 }
@@ -435,7 +436,7 @@ METHOD(listener_t, ike_updown, bool,
 {
 	/* this callback is only registered during initiation, so if the IKE_SA
 	 * goes down we assume some kind of authentication error, more specific
-	 * errors are catched in the alert() handler */
+	 * errors are caught in the alert() handler */
 	if (this->ike_sa == ike_sa && !up)
 	{
 		charonservice->update_status(charonservice,
@@ -639,6 +640,9 @@ static void add_auth_cfg_pw(private_android_service_t *this,
 	{	/* use EAP-TTLS if BYOD is enabled */
 		auth->add(auth, AUTH_RULE_EAP_TYPE, EAP_TTLS);
 	}
+	/* in case EAP-PEAP or EAP-TTLS is used we currently accept any identity */
+	auth->add(auth, AUTH_RULE_AAA_IDENTITY,
+			  identification_create_from_string("%any"));
 
 	username = this->settings->get_str(this->settings, "connection.username",
 									   NULL);
@@ -707,6 +711,27 @@ static bool add_auth_cfg_cert(private_android_service_t *this,
 	return TRUE;
 }
 
+static proposal_t *parse_proposal(private_android_service_t *this,
+								  protocol_id_t proto, char *opt)
+{
+	proposal_t *proposal = NULL;
+	char *prop;
+
+	prop = this->settings->get_str(this->settings, opt, NULL);
+	if (!prop || !strlen(prop))
+	{
+		return NULL;
+	}
+
+	proposal = proposal_create_from_string(proto, prop);
+	if (!proposal)
+	{
+		DBG1(DBG_CFG, "invalid %N proposal '%s', falling back to defaults",
+			 protocol_id_names, proto, prop);
+	}
+	return proposal;
+}
+
 static job_requeue_t initiate(private_android_service_t *this)
 {
 	identification_t *gateway = NULL;
@@ -714,10 +739,11 @@ static job_requeue_t initiate(private_android_service_t *this)
 	peer_cfg_t *peer_cfg;
 	child_cfg_t *child_cfg;
 	traffic_selector_t *ts;
+	proposal_t *proposal;
 	ike_sa_t *ike_sa;
 	auth_cfg_t *auth;
 	peer_cfg_create_t peer = {
-		.cert_policy = CERT_SEND_IF_ASKED,
+		.cert_policy = CERT_ALWAYS_SEND,
 		.unique = UNIQUE_REPLACE,
 		.rekey_time = 36000, /* 10h */
 		.jitter_time = 600, /* 10min */
@@ -737,15 +763,31 @@ static job_requeue_t initiate(private_android_service_t *this)
 	};
 	char *type, *server, *remote_id;
 	int port;
+	bool certreq;
+
+	if (android_sdk_version >= ANDROID_LOLLIPOP)
+	{   /* only try once and notify the GUI on Android 5+ where we have a blocking TUN device */
+		peer.keyingtries = 1;
+	}
 
 	server = this->settings->get_str(this->settings, "connection.server", NULL);
 	port = this->settings->get_int(this->settings, "connection.port",
 								   IKEV2_UDP_PORT);
-	ike_cfg = ike_cfg_create(IKEV2, TRUE, TRUE, "0.0.0.0",
+	certreq = this->settings->get_bool(this->settings, "connection.certreq",
+									   TRUE);
+	ike_cfg = ike_cfg_create(IKEV2, certreq, TRUE, "0.0.0.0",
 							 charon->socket->get_port(charon->socket, FALSE),
 							 server, port, FRAGMENTATION_YES, 0);
-	ike_cfg->add_proposal(ike_cfg, proposal_create_default(PROTO_IKE));
-	ike_cfg->add_proposal(ike_cfg, proposal_create_default_aead(PROTO_IKE));
+	proposal = parse_proposal(this, PROTO_IKE, "connection.ike_proposal");
+	if (proposal)
+	{
+		ike_cfg->add_proposal(ike_cfg, proposal);
+	}
+	else
+	{
+		ike_cfg->add_proposal(ike_cfg, proposal_create_default(PROTO_IKE));
+		ike_cfg->add_proposal(ike_cfg, proposal_create_default_aead(PROTO_IKE));
+	}
 
 	peer_cfg = peer_cfg_create("android", ike_cfg, &peer);
 	peer_cfg->add_virtual_ip(peer_cfg, host_create_any(AF_INET));
@@ -761,7 +803,7 @@ static job_requeue_t initiate(private_android_service_t *this)
 		{
 			peer_cfg->destroy(peer_cfg);
 			charonservice->update_status(charonservice,
-										 CHARONSERVICE_GENERIC_ERROR);
+										 CHARONSERVICE_CERTIFICATE_UNAVAILABLE);
 			return JOB_REQUEUE_NONE;
 		}
 	}
@@ -789,30 +831,33 @@ static job_requeue_t initiate(private_android_service_t *this)
 	}
 	auth->add(auth, AUTH_RULE_IDENTITY, gateway);
 	auth->add(auth, AUTH_RULE_AUTH_CLASS, AUTH_CLASS_PUBKEY);
+	if (this->settings->get_bool(this->settings, "connection.strict_revocation", FALSE))
+	{
+		auth->add(auth, AUTH_RULE_CRL_VALIDATION, VALIDATION_GOOD);
+	}
 	peer_cfg->add_auth_cfg(peer_cfg, auth, FALSE);
 
 	child_cfg = child_cfg_create("android", &child);
-	/* create ESP proposals with and without DH groups, let responder decide
-	 * if PFS is used */
-	child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
-							"aes128gcm16-aes256gcm16-chacha20poly1305-"
-							"curve25519-ecp256-modp3072"));
-	child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
-							"aes128-sha256-curve25519-ecp256-modp3072"));
-	child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
-							"aes256-sha384-ecp521-modp8192"));
-	child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
-							"aes128-aes192-aes256-sha1-sha256-sha384-sha512-"
-							"curve25519-ecp256-ecp384-ecp521-"
-							"modp2048-modp3072-modp4096-modp1024"));
-	child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
-							"aes128gcm16-aes256gcm16-chacha20poly1305"));
-	child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
-							"aes128-sha256"));
-	child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
-							"aes256-sha384"));
-	child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
-							"aes128-aes192-aes256-sha1-sha256-sha384-sha512"));
+	proposal = parse_proposal(this, PROTO_ESP, "connection.esp_proposal");
+	if (proposal)
+	{
+		child_cfg->add_proposal(child_cfg, proposal);
+	}
+	else
+	{	/* create ESP proposals with and without DH groups, let responder decide
+		 * if PFS is used */
+		child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
+								"aes256gcm16-aes128gcm16-chacha20poly1305-"
+								"curve25519-ecp384-ecp521-modp3072-modp4096-ecp256-modp8192"));
+		child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
+								"aes256-aes192-aes128-sha384-sha256-sha512-sha1-"
+								"curve25519-ecp384-ecp521-modp3072-modp4096-ecp256-modp2048-"
+								"modp8192"));
+		child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
+								"aes256gcm16-aes128gcm16-chacha20poly1305"));
+		child_cfg->add_proposal(child_cfg, proposal_create_from_string(PROTO_ESP,
+								"aes256-aes192-aes128-sha384-sha256-sha512-sha1"));
+	}
 	ts = traffic_selector_create_from_cidr("0.0.0.0/0", 0, 0, 65535);
 	child_cfg->add_traffic_selector(child_cfg, TRUE, ts);
 	ts = traffic_selector_create_from_cidr("0.0.0.0/0", 0, 0, 65535);

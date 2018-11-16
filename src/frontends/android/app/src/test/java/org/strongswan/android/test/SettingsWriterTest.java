@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -95,7 +95,8 @@ public class SettingsWriterTest
 		SettingsWriter writer = new SettingsWriter();
 		writer.setValue("key", "val\"ue");
 		writer.setValue("nl", "val\nue");
-		assertEquals("serialized", "key=\"val\\\"ue\"\nnl=\"val\nue\"\n", writer.serialize());
+		writer.setValue("bs", "val\\ue");
+		assertEquals("serialized", "key=\"val\\\"ue\"\nnl=\"val\nue\"\nbs=\"val\\\\ue\"\n", writer.serialize());
 	}
 
 	@Test

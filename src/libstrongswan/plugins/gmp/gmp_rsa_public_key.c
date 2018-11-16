@@ -1,7 +1,8 @@
 /*
+ * Copyright (C) 2017-2018 Tobias Brunner
  * Copyright (C) 2005-2009 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -27,6 +28,7 @@
 #include <asn1/asn1.h>
 #include <asn1/asn1_parser.h>
 #include <crypto/hashers/hasher.h>
+#include <credentials/keys/signature_params.h>
 
 #ifdef HAVE_MPZ_POWM_SEC
 # undef mpz_powm
@@ -68,7 +70,9 @@ struct private_gmp_rsa_public_key_t {
 /**
  * Shared functions defined in gmp_rsa_private_key.c
  */
-extern chunk_t gmp_mpz_to_chunk(const mpz_t value);
+chunk_t gmp_mpz_to_chunk(const mpz_t value);
+bool gmp_emsa_pkcs1_signature_data(hash_algorithm_t hash_algorithm,
+								   chunk_t data, size_t keylen, chunk_t *em);
 
 /**
  * RSAEP algorithm specified in PKCS#1.
@@ -78,11 +82,17 @@ static chunk_t rsaep(private_gmp_rsa_public_key_t *this, chunk_t data)
 	mpz_t m, c;
 	chunk_t encrypted;
 
-	mpz_init(c);
 	mpz_init(m);
-
 	mpz_import(m, data.len, 1, 1, 1, 0, data.ptr);
 
+	if (mpz_cmp_ui(m, 0) <= 0 || mpz_cmp(m, this->n) >= 0)
+	{	/* m must be <= n-1, and while 0 is technically a valid value, it
+		 * doesn't really make sense here, so we filter that too */
+		mpz_clear(m);
+		return chunk_empty;
+	}
+
+	mpz_init(c);
 	mpz_powm(c, m, this->e, this->n);
 
 	encrypted.len = this->k;
@@ -107,26 +117,13 @@ static chunk_t rsavp1(private_gmp_rsa_public_key_t *this, chunk_t data)
 }
 
 /**
- * ASN.1 definition of digestInfo
- */
-static const asn1Object_t digestInfoObjects[] = {
-	{ 0, "digestInfo",			ASN1_SEQUENCE,		ASN1_OBJ  }, /*  0 */
-	{ 1,   "digestAlgorithm",	ASN1_EOC,			ASN1_RAW  }, /*  1 */
-	{ 1,   "digest",			ASN1_OCTET_STRING,	ASN1_BODY }, /*  2 */
-	{ 0, "exit",				ASN1_EOC,			ASN1_EXIT }
-};
-#define DIGEST_INFO					0
-#define DIGEST_INFO_ALGORITHM		1
-#define DIGEST_INFO_DIGEST			2
-
-/**
- * Verification of an EMPSA PKCS1 signature described in PKCS#1
+ * Verification of an EMSA PKCS1 signature described in PKCS#1
  */
 static bool verify_emsa_pkcs1_signature(private_gmp_rsa_public_key_t *this,
 										hash_algorithm_t algorithm,
 										chunk_t data, chunk_t signature)
 {
-	chunk_t em_ori, em;
+	chunk_t em_expected, em;
 	bool success = FALSE;
 
 	/* remove any preceding 0-bytes from signature */
@@ -140,140 +137,137 @@ static bool verify_emsa_pkcs1_signature(private_gmp_rsa_public_key_t *this,
 		return FALSE;
 	}
 
+	/* generate expected signature value */
+	if (!gmp_emsa_pkcs1_signature_data(algorithm, data, this->k, &em_expected))
+	{
+		return FALSE;
+	}
+
 	/* unpack signature */
-	em_ori = em = rsavp1(this, signature);
+	em = rsavp1(this, signature);
 
-	/* result should look like this:
-	 * EM = 0x00 || 0x01 || PS || 0x00 || T.
-	 * PS = 0xFF padding, with length to fill em
-	 * T = oid || hash
-	 */
+	success = chunk_equals_const(em_expected, em);
 
-	/* check magic bytes */
-	if (*(em.ptr) != 0x00 || *(em.ptr+1) != 0x01)
+	chunk_free(&em_expected);
+	chunk_free(&em);
+	return success;
+}
+
+/**
+ * Verification of an EMSA PSS signature described in PKCS#1
+ */
+static bool verify_emsa_pss_signature(private_gmp_rsa_public_key_t *this,
+									  rsa_pss_params_t *params, chunk_t data,
+									  chunk_t signature)
+{
+	ext_out_function_t xof;
+	hasher_t *hasher = NULL;
+	xof_t *mgf = NULL;
+	chunk_t em, hash, salt, db, h, dbmask, m;
+	size_t embits, maskbits;
+	int i;
+	bool success = FALSE;
+
+	if (!params)
 	{
-		goto end;
+		return FALSE;
 	}
-	em = chunk_skip(em, 2);
-
-	/* find magic 0x00 */
-	while (em.len > 0)
+	xof = xof_mgf1_from_hash_algorithm(params->mgf1_hash);
+	if (xof == XOF_UNDEFINED)
 	{
-		if (*em.ptr == 0x00)
-		{
-			/* found magic byte, stop */
-			em = chunk_skip(em, 1);
-			break;
-		}
-		else if (*em.ptr != 0xFF)
-		{
-			/* bad padding, decryption failed ?!*/
-			goto end;
-		}
-		em = chunk_skip(em, 1);
+		DBG1(DBG_LIB, "%N is not supported for MGF1", hash_algorithm_names,
+			 params->mgf1_hash);
+		return FALSE;
 	}
-
-	if (em.len == 0)
+	chunk_skip_zero(signature);
+	if (signature.len == 0 || signature.len > this->k)
 	{
-		/* no digestInfo found */
-		goto end;
+		return FALSE;
 	}
-
-	if (algorithm == HASH_UNKNOWN)
-	{   /* IKEv1 signatures without digestInfo */
-		if (em.len != data.len)
-		{
-			DBG1(DBG_LIB, "hash size in signature is %u bytes instead of"
-				 " %u bytes", em.len, data.len);
-			goto end;
+	/* EM = RSAVP1((n, e), S) */
+	em = rsavp1(this, signature);
+	if (!em.len)
+	{
+		goto error;
+	}
+	/* emBits = modBits - 1 */
+	embits = mpz_sizeinbase(this->n, 2) - 1;
+	/* mHash = Hash(M) */
+	hasher = lib->crypto->create_hasher(lib->crypto, params->hash);
+	if (!hasher)
+	{
+		DBG1(DBG_LIB, "hash algorithm %N not supported",
+			 hash_algorithm_names, params->hash);
+		goto error;
+	}
+	hash = chunk_alloca(hasher->get_hash_size(hasher));
+	if (!hasher->get_hash(hasher, data, hash.ptr))
+	{
+		goto error;
+	}
+	/* determine salt length */
+	salt.len = hash.len;
+	if (params->salt_len > RSA_PSS_SALT_LEN_DEFAULT)
+	{
+		salt.len = params->salt_len;
+	}
+	/* verify general structure of EM */
+	maskbits = (8 * em.len) - embits;
+	if (em.len < (hash.len + salt.len + 2) || em.ptr[em.len-1] != 0xbc ||
+		(em.ptr[0] & (0xff << (8-maskbits))))
+	{	/* inconsistent */
+		goto error;
+	}
+	/* split EM in maskedDB and H */
+	db = chunk_create(em.ptr, em.len - hash.len - 1);
+	h = chunk_create(em.ptr + db.len, hash.len);
+	/* dbMask = MGF(H, emLen - hLen - 1) */
+	mgf = lib->crypto->create_xof(lib->crypto, xof);
+	if (!mgf)
+	{
+		DBG1(DBG_LIB, "%N not supported", ext_out_function_names, xof);
+		goto error;
+	}
+	dbmask = chunk_alloca(db.len);
+	if (!mgf->set_seed(mgf, h) ||
+		!mgf->get_bytes(mgf, dbmask.len, dbmask.ptr))
+	{
+		DBG1(DBG_LIB, "%N not supported or failed", ext_out_function_names, xof);
+		goto error;
+	}
+	/* DB = maskedDB xor dbMask */
+	memxor(db.ptr, dbmask.ptr, db.len);
+	if (maskbits)
+	{
+		db.ptr[0] &= (0xff >> maskbits);
+	}
+	/* check DB = PS | 0x01 | salt */
+	for (i = 0; i < (db.len - salt.len - 1); i++)
+	{
+		if (db.ptr[i])
+		{	/* padding not 0 */
+			goto error;
 		}
-		success = memeq_const(em.ptr, data.ptr, data.len);
 	}
-	else
-	{   /* IKEv2 and X.509 certificate signatures */
-		asn1_parser_t *parser;
-		chunk_t object;
-		int objectID;
-		hash_algorithm_t hash_algorithm = HASH_UNKNOWN;
-
-		DBG2(DBG_LIB, "signature verification:");
-		parser = asn1_parser_create(digestInfoObjects, em);
-
-		while (parser->iterate(parser, &objectID, &object))
-		{
-			switch (objectID)
-			{
-				case DIGEST_INFO:
-				{
-					if (em.len > object.len)
-					{
-						DBG1(DBG_LIB, "digestInfo field in signature is"
-							 " followed by %u surplus bytes",
-							 em.len - object.len);
-						goto end_parser;
-					}
-					break;
-				}
-				case DIGEST_INFO_ALGORITHM:
-				{
-					int hash_oid = asn1_parse_algorithmIdentifier(object,
-										 parser->get_level(parser)+1, NULL);
-
-					hash_algorithm = hasher_algorithm_from_oid(hash_oid);
-					if (hash_algorithm == HASH_UNKNOWN || hash_algorithm != algorithm)
-					{
-						DBG1(DBG_LIB, "expected hash algorithm %N, but found"
-							 " %N (OID: %#B)", hash_algorithm_names, algorithm,
-							 hash_algorithm_names, hash_algorithm,  &object);
-						goto end_parser;
-					}
-					break;
-				}
-				case DIGEST_INFO_DIGEST:
-				{
-					chunk_t hash;
-					hasher_t *hasher;
-
-					hasher = lib->crypto->create_hasher(lib->crypto, hash_algorithm);
-					if (hasher == NULL)
-					{
-						DBG1(DBG_LIB, "hash algorithm %N not supported",
-							 hash_algorithm_names, hash_algorithm);
-						goto end_parser;
-					}
-
-					if (object.len != hasher->get_hash_size(hasher))
-					{
-						DBG1(DBG_LIB, "hash size in signature is %u bytes"
-							 " instead of %u bytes", object.len,
-							 hasher->get_hash_size(hasher));
-						hasher->destroy(hasher);
-						goto end_parser;
-					}
-
-					/* build our own hash and compare */
-					if (!hasher->allocate_hash(hasher, data, &hash))
-					{
-						hasher->destroy(hasher);
-						goto end_parser;
-					}
-					hasher->destroy(hasher);
-					success = memeq_const(object.ptr, hash.ptr, hash.len);
-					free(hash.ptr);
-					break;
-				}
-				default:
-					break;
-			}
-		}
-
-end_parser:
-		success &= parser->success(parser);
-		parser->destroy(parser);
+	if (db.ptr[i++] != 0x01)
+	{	/* 0x01 not found */
+		goto error;
 	}
+	salt.ptr = &db.ptr[i];
+	/* M' = 0x0000000000000000 | mHash | salt */
+	m = chunk_cata("ccc",
+				   chunk_from_chars(0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00),
+				   hash, salt);
+	if (!hasher->get_hash(hasher, m, hash.ptr))
+	{
+		goto error;
+	}
+	success = memeq_const(h.ptr, hash.ptr, hash.len);
 
-end:
-	free(em_ori.ptr);
+error:
+	DESTROY_IF(hasher);
+	DESTROY_IF(mgf);
+	free(em.ptr);
 	return success;
 }
 
@@ -284,7 +278,7 @@ METHOD(public_key_t, get_type, key_type_t,
 }
 
 METHOD(public_key_t, verify, bool,
-	private_gmp_rsa_public_key_t *this, signature_scheme_t scheme,
+	private_gmp_rsa_public_key_t *this, signature_scheme_t scheme, void *params,
 	chunk_t data, chunk_t signature)
 {
 	switch (scheme)
@@ -311,6 +305,8 @@ METHOD(public_key_t, verify, bool,
 			return verify_emsa_pkcs1_signature(this, HASH_SHA1, data, signature);
 		case SIGN_RSA_EMSA_PKCS1_MD5:
 			return verify_emsa_pkcs1_signature(this, HASH_MD5, data, signature);
+		case SIGN_RSA_EMSA_PSS:
+			return verify_emsa_pss_signature(this, params, data, signature);
 		default:
 			DBG1(DBG_LIB, "signature scheme %N not supported in RSA",
 				 signature_scheme_names, scheme);

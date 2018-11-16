@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -55,7 +55,7 @@ METHOD(plugin_t, get_name, char*,
 }
 
 /**
- * Try to instanciate 3gpp2 functions and card/provider backends
+ * Try to instantiate 3gpp2 functions and card/provider backends
  */
 static bool register_functions(private_eap_aka_3gpp2_t *this,
 							   plugin_feature_t *feature, bool reg, void *data)

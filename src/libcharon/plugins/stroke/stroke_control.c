@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2013-2015 Tobias Brunner
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -316,7 +316,8 @@ static void charon_terminate(private_stroke_control_t *this, uint32_t id,
 		else
 		{
 			status = charon->controller->terminate_ike(charon->controller, id,
-							(controller_cb_t)stroke_log, &info, this->timeout);
+							FALSE, (controller_cb_t)stroke_log, &info,
+							this->timeout);
 		}
 		report_terminate_status(this, status, out, id, child);
 	}
@@ -327,7 +328,7 @@ static void charon_terminate(private_stroke_control_t *this, uint32_t id,
 	}
 	else
 	{
-		charon->controller->terminate_ike(charon->controller, id,
+		charon->controller->terminate_ike(charon->controller, id, FALSE,
 										  NULL, NULL, 0);
 	}
 }
@@ -589,54 +590,12 @@ METHOD(stroke_control_t, purge_ike, void,
 }
 
 /**
- * Find an existing CHILD_SA/reqid
- */
-static uint32_t find_reqid(child_cfg_t *child_cfg)
-{
-	enumerator_t *enumerator, *children;
-	child_sa_t *child_sa;
-	ike_sa_t *ike_sa;
-	char *name;
-	uint32_t reqid;
-
-	reqid = charon->traps->find_reqid(charon->traps, child_cfg);
-	if (reqid)
-	{	/* already trapped */
-		return reqid;
-	}
-
-	name = child_cfg->get_name(child_cfg);
-	enumerator = charon->controller->create_ike_sa_enumerator(
-													charon->controller, TRUE);
-	while (enumerator->enumerate(enumerator, &ike_sa))
-	{
-		children = ike_sa->create_child_sa_enumerator(ike_sa);
-		while (children->enumerate(children, (void**)&child_sa))
-		{
-			if (streq(name, child_sa->get_name(child_sa)))
-			{
-				reqid = child_sa->get_reqid(child_sa);
-				break;
-			}
-		}
-		children->destroy(children);
-		if (reqid)
-		{
-			break;
-		}
-	}
-	enumerator->destroy(enumerator);
-	return reqid;
-}
-
-/**
  * call charon to install a shunt or trap
  */
 static void charon_route(peer_cfg_t *peer_cfg, child_cfg_t *child_cfg,
 						 char *name, FILE *out)
 {
 	ipsec_mode_t mode;
-	uint32_t reqid;
 
 	mode = child_cfg->get_mode(child_cfg);
 	if (mode == MODE_PASS || mode == MODE_DROP)
@@ -655,8 +614,7 @@ static void charon_route(peer_cfg_t *peer_cfg, child_cfg_t *child_cfg,
 	}
 	else
 	{
-		reqid = find_reqid(child_cfg);
-		if (charon->traps->install(charon->traps, peer_cfg, child_cfg, reqid))
+		if (charon->traps->install(charon->traps, peer_cfg, child_cfg))
 		{
 			fprintf(out, "'%s' routed\n", name);
 		}
@@ -730,46 +688,13 @@ METHOD(stroke_control_t, route, void,
 METHOD(stroke_control_t, unroute, void,
 	private_stroke_control_t *this, stroke_msg_t *msg, FILE *out)
 {
-	child_cfg_t *child_cfg;
-	child_sa_t *child_sa;
-	enumerator_t *enumerator;
-	char *ns, *found = NULL;
-	uint32_t id = 0;
-
-	enumerator = charon->shunts->create_enumerator(charon->shunts);
-	while (enumerator->enumerate(enumerator, &ns, &child_cfg))
+	if (charon->shunts->uninstall(charon->shunts, NULL, msg->unroute.name))
 	{
-		if (ns && streq(msg->unroute.name, child_cfg->get_name(child_cfg)))
-		{
-			found = strdup(ns);
-			break;
-		}
-	}
-	enumerator->destroy(enumerator);
-	if (found && charon->shunts->uninstall(charon->shunts, found,
-										   msg->unroute.name))
-	{
-		free(found);
 		fprintf(out, "shunt policy '%s' uninstalled\n", msg->unroute.name);
-		return;
 	}
-	free(found);
-
-	enumerator = charon->traps->create_enumerator(charon->traps);
-	while (enumerator->enumerate(enumerator, NULL, &child_sa))
+	else if (charon->traps->uninstall(charon->traps, NULL, msg->unroute.name))
 	{
-		if (streq(msg->unroute.name, child_sa->get_name(child_sa)))
-		{
-			id = child_sa->get_reqid(child_sa);
-			break;
-		}
-	}
-	enumerator->destroy(enumerator);
-
-	if (id)
-	{
-		charon->traps->uninstall(charon->traps, id);
-		fprintf(out, "configuration '%s' unrouted\n", msg->unroute.name);
+		fprintf(out, "trap policy '%s' unrouted\n", msg->unroute.name);
 	}
 	else
 	{

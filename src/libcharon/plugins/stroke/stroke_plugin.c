@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -66,6 +66,7 @@ METHOD(plugin_t, get_features, int,
 	static plugin_feature_t f[] = {
 		PLUGIN_CALLBACK((plugin_feature_callback_t)register_stroke, NULL),
 			PLUGIN_PROVIDE(CUSTOM, "stroke"),
+				PLUGIN_SDEPEND(CUSTOM, "counters"),
 				PLUGIN_SDEPEND(PRIVKEY, KEY_RSA),
 				PLUGIN_SDEPEND(PRIVKEY, KEY_ECDSA),
 				PLUGIN_SDEPEND(PRIVKEY, KEY_DSA),

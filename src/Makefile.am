@@ -88,10 +88,6 @@ if USE_CONFTEST
   SUBDIRS += conftest
 endif
 
-if USE_DUMM
-  SUBDIRS += dumm
-endif
-
 if USE_FAST
   SUBDIRS += libfast
 endif
@@ -128,10 +124,22 @@ if USE_LIBPTTLS
   SUBDIRS += pt-tls-client
 endif
 
+if USE_IMC_SWIMA
+  SUBDIRS += sw-collector
+endif
+
+if USE_IMV_SWIMA
+  SUBDIRS += sec-updater
+endif
+
 if USE_INTEGRITY_TEST
   SUBDIRS += checksum
 endif
 
 if USE_AIKGEN
   SUBDIRS += aikgen
+endif
+
+if USE_TPM
+  SUBDIRS += tpm_extendpcr
 endif

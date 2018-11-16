@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2012 Tobias Brunner
+ * Copyright (C) 2012-2017 Tobias Brunner
  * Copyright (C) 2012 Giuliano Grassi
  * Copyright (C) 2012 Ralf Sager
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -44,6 +44,7 @@
  */
 extern jclass *android_charonvpnservice_class;
 extern jclass *android_charonvpnservice_builder_class;
+extern jclass *android_simple_fetcher_class;
 
 /**
  * Currently known (supported) SDK versions
@@ -56,6 +57,7 @@ typedef enum {
 	ANDROID_JELLY_BEAN = 16,
 	ANDROID_JELLY_BEAN_MR1 = 17,
 	ANDROID_JELLY_BEAN_MR2 = 18,
+	ANDROID_LOLLIPOP = 21,
 } android_sdk_version_t;
 
 /**
@@ -64,6 +66,20 @@ typedef enum {
  * see android.os.Build.VERSION.SDK_INT
  */
 extern android_sdk_version_t android_sdk_version;
+
+/**
+ * A description of the current Android release
+ *
+ * see android.os.Build
+ */
+extern char *android_version_string;
+
+/**
+ * A description of the current device
+ *
+ * see android.os.Build
+ */
+extern char *android_device_string;
 
 /**
  * Attach the current thread to the JVM

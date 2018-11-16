@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -233,7 +233,7 @@ static bool scheme_supported(private_agent_private_key_t *this,
 }
 
 METHOD(private_key_t, sign, bool,
-	private_agent_private_key_t *this, signature_scheme_t scheme,
+	private_agent_private_key_t *this, signature_scheme_t scheme, void *params,
 	chunk_t data, chunk_t *signature)
 {
 	uint32_t len, flags;

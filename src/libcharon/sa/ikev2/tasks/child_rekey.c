@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Tobias Brunner
+ * Copyright (C) 2009-2018 Tobias Brunner
  * Copyright (C) 2005-2007 Martin Willi
  * Copyright (C) 2005 Jan Hutter
  * HSR Hochschule fuer Technik Rapperswil
@@ -145,8 +145,7 @@ static void find_child(private_child_rekey_t *this, message_t *message)
 			child_sa = this->ike_sa->get_child_sa(this->ike_sa, protocol,
 												  spi, FALSE);
 			if (child_sa &&
-				child_sa->get_state(child_sa) == CHILD_DELETING &&
-				child_sa->get_outbound_state(child_sa) == CHILD_OUTBOUND_NONE)
+				child_sa->get_state(child_sa) == CHILD_DELETED)
 			{	/* ignore rekeyed CHILD_SAs we keep around */
 				return;
 			}
@@ -190,8 +189,18 @@ METHOD(task_t, build_i, status_t,
 	/* our CHILD_CREATE task does the hard work for us */
 	if (!this->child_create)
 	{
+		proposal_t *proposal;
+		uint16_t dh_group;
+
 		this->child_create = child_create_create(this->ike_sa,
 									config->get_ref(config), TRUE, NULL, NULL);
+
+		proposal = this->child_sa->get_proposal(this->child_sa);
+		if (proposal->get_algorithm(proposal, DIFFIE_HELLMAN_GROUP,
+									&dh_group, NULL))
+		{	/* reuse the DH group negotiated previously */
+			this->child_create->use_dh_group(this->child_create, dh_group);
+		}
 	}
 	reqid = this->child_sa->get_reqid(this->child_sa);
 	this->child_create->use_reqid(this->child_create, reqid);
@@ -203,7 +212,8 @@ METHOD(task_t, build_i, status_t,
 									   message) != NEED_MORE)
 	{
 		schedule_delayed_rekey(this);
-		return FAILED;
+		message->set_exchange_type(message, EXCHANGE_TYPE_UNDEFINED);
+		return SUCCESS;
 	}
 	if (message->get_exchange_type(message) == CREATE_CHILD_SA)
 	{
@@ -283,7 +293,8 @@ METHOD(task_t, build_r, status_t,
 /**
  * Handle a rekey collision
  */
-static child_sa_t *handle_collision(private_child_rekey_t *this)
+static child_sa_t *handle_collision(private_child_rekey_t *this,
+									child_sa_t **to_install)
 {
 	child_sa_t *to_delete;
 
@@ -302,8 +313,11 @@ static child_sa_t *handle_collision(private_child_rekey_t *this)
 		{
 			child_sa_t *child_sa;
 
-			DBG1(DBG_IKE, "CHILD_SA rekey collision won, deleting old child");
+			*to_install = this->child_create->get_child(this->child_create);
 			to_delete = this->child_sa;
+			DBG1(DBG_IKE, "CHILD_SA rekey collision won, deleting old child "
+				 "%s{%d}", to_delete->get_name(to_delete),
+				 to_delete->get_unique_id(to_delete));
 			/* don't touch child other created, it has already been deleted */
 			if (!this->other_child_destroyed)
 			{
@@ -321,9 +335,10 @@ static child_sa_t *handle_collision(private_child_rekey_t *this)
 		}
 		else
 		{
-			DBG1(DBG_IKE, "CHILD_SA rekey collision lost, "
-				 "deleting rekeyed child");
 			to_delete = this->child_create->get_child(this->child_create);
+			DBG1(DBG_IKE, "CHILD_SA rekey collision lost, deleting redundant "
+				 "child %s{%d}", to_delete->get_name(to_delete),
+				 to_delete->get_unique_id(to_delete));
 		}
 	}
 	else
@@ -334,15 +349,17 @@ static child_sa_t *handle_collision(private_child_rekey_t *this)
 		 * the CHILD_SA the other is not deleting. */
 		if (del->get_child(del) != this->child_sa)
 		{
-			DBG1(DBG_IKE, "CHILD_SA rekey/delete collision, "
-				 "deleting rekeyed child");
 			to_delete = this->child_sa;
+			DBG1(DBG_IKE, "CHILD_SA rekey/delete collision, deleting old child "
+				 "%s{%d}", to_delete->get_name(to_delete),
+				 to_delete->get_unique_id(to_delete));
 		}
 		else
 		{
-			DBG1(DBG_IKE, "CHILD_SA rekey/delete collision, "
-				 "deleting redundant child");
 			to_delete = this->child_create->get_child(this->child_create);
+			DBG1(DBG_IKE, "CHILD_SA rekey/delete collision, deleting redundant "
+				 "child %s{%d}", to_delete->get_name(to_delete),
+				 to_delete->get_unique_id(to_delete));
 		}
 	}
 	return to_delete;
@@ -353,7 +370,7 @@ METHOD(task_t, process_i, status_t,
 {
 	protocol_id_t protocol;
 	uint32_t spi;
-	child_sa_t *to_delete;
+	child_sa_t *to_delete, *to_install = NULL;
 
 	if (message->get_notify(message, NO_ADDITIONAL_SAS))
 	{
@@ -415,19 +432,48 @@ METHOD(task_t, process_i, status_t,
 	/* check for rekey collisions */
 	if (this->collision)
 	{
-		to_delete = handle_collision(this);
+		to_delete = handle_collision(this, &to_install);
 	}
 	else
 	{
+		to_install = this->child_create->get_child(this->child_create);
 		to_delete = this->child_sa;
 	}
+	if (to_install)
+	{
+		if (to_install->install_outbound(to_install) != SUCCESS)
+		{
+			DBG1(DBG_IKE, "unable to install outbound IPsec SA (SAD) in kernel");
+			charon->bus->alert(charon->bus, ALERT_INSTALL_CHILD_SA_FAILED,
+							   to_install);
+			/* FIXME: delete the child_sa? fail the task? */
+		}
+		else
+		{
+			linked_list_t *my_ts, *other_ts;
 
+			my_ts = linked_list_create_from_enumerator(
+						to_install->create_ts_enumerator(to_install, TRUE));
+			other_ts = linked_list_create_from_enumerator(
+						to_install->create_ts_enumerator(to_install, FALSE));
+
+			DBG0(DBG_IKE, "outbound CHILD_SA %s{%d} established "
+				 "with SPIs %.8x_i %.8x_o and TS %#R === %#R",
+				 to_install->get_name(to_install),
+				 to_install->get_unique_id(to_install),
+				 ntohl(to_install->get_spi(to_install, TRUE)),
+				 ntohl(to_install->get_spi(to_install, FALSE)),
+				 my_ts, other_ts);
+
+			my_ts->destroy(my_ts);
+			other_ts->destroy(other_ts);
+		}
+	}
 	if (to_delete != this->child_create->get_child(this->child_create))
 	{	/* invoke rekey hook if rekeying successful */
 		charon->bus->child_rekey(charon->bus, this->child_sa,
 							this->child_create->get_child(this->child_create));
 	}
-
 	if (to_delete == NULL)
 	{
 		return SUCCESS;

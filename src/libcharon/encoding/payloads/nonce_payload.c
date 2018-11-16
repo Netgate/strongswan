@@ -2,7 +2,7 @@
  * Copyright (C) 2005-2010 Martin Willi
  * Copyright (C) 2010 revosec AG
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -86,7 +86,7 @@ static encoding_rule_t encodings[] = {
 	{ RESERVED_BIT,		offsetof(private_nonce_payload_t, reserved[6])		},
 	/* Length of the whole nonce payload*/
 	{ PAYLOAD_LENGTH,	offsetof(private_nonce_payload_t, payload_length)	},
-	/* some nonce bytes, lenth is defined in PAYLOAD_LENGTH */
+	/* some nonce bytes, length is defined in PAYLOAD_LENGTH */
 	{ CHUNK_DATA,		offsetof(private_nonce_payload_t, nonce)			},
 };
 

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -937,7 +937,6 @@ load_tester_config_t *load_tester_config_create()
 		.leases = hashtable_create((hashtable_hash_t)hash,
 								   (hashtable_equals_t)equals, 256),
 		.mutex = mutex_create(MUTEX_TYPE_DEFAULT),
-		.num = 1,
 		.unique_port = UNIQUE_PORT_START,
 	);
 

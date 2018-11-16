@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2011-2016 Tobias Brunner
  * Copyright (C) 2006 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -827,7 +827,11 @@ METHOD(bus_t, ike_updown, void,
 		enumerator = ike_sa->create_child_sa_enumerator(ike_sa);
 		while (enumerator->enumerate(enumerator, (void**)&child_sa))
 		{
-			child_updown(this, child_sa, FALSE);
+			if (child_sa->get_state(child_sa) != CHILD_REKEYED &&
+				child_sa->get_state(child_sa) != CHILD_DELETED)
+			{
+				child_updown(this, child_sa, FALSE);
+			}
 		}
 		enumerator->destroy(enumerator);
 	}

@@ -1,6 +1,6 @@
 #
 # Copyright (C) 2007-2017 Tobias Brunner
-# Copyright (C) 2006-2016 Andreas Steffen
+# Copyright (C) 2006-2017 Andreas Steffen
 # Copyright (C) 2006-2014 Martin Willi
 # HSR Hochschule fuer Technik Rapperswil
 #
@@ -140,6 +140,7 @@ ARG_DISBL_SET([aes],            [disable AES software implementation plugin.])
 ARG_ENABL_SET([af-alg],         [enable AF_ALG crypto interface to Linux Crypto API.])
 ARG_ENABL_SET([bliss],          [enable BLISS software implementation plugin.])
 ARG_ENABL_SET([blowfish],       [enable Blowfish software implementation plugin.])
+ARG_ENABL_SET([botan],          [enables the Botan crypto plugin.])
 ARG_ENABL_SET([ccm],            [enables the CCM AEAD wrapper crypto plugin.])
 ARG_ENABL_SET([chapoly],        [enables the ChaCha20/Poly1305 AEAD plugin.])
 ARG_DISBL_SET([cmac],           [disable CMAC crypto implementation plugin.])
@@ -199,6 +200,7 @@ ARG_ENABL_SET([eap-sim],        [enable SIM authentication module for EAP.])
 ARG_ENABL_SET([eap-sim-file],   [enable EAP-SIM backend based on a triplet file.])
 ARG_ENABL_SET([eap-sim-pcsc],   [enable EAP-SIM backend based on a smartcard reader. Requires libpcsclite.])
 ARG_ENABL_SET([eap-aka],        [enable EAP AKA authentication module.])
+ARG_ENABL_SET([eap-aka-3gpp],   [enable EAP AKA backend implementing 3GPP MILENAGE algorithms in software.])
 ARG_ENABL_SET([eap-aka-3gpp2],  [enable EAP AKA backend implementing 3GPP2 algorithms in software. Requires libgmp.])
 ARG_ENABL_SET([eap-simaka-sql], [enable EAP-SIM/AKA backend based on a triplet/quintuplet SQL database.])
 ARG_ENABL_SET([eap-simaka-pseudonym], [enable EAP-SIM/AKA pseudonym storage plugin.])
@@ -259,8 +261,8 @@ ARG_ENABL_SET([imc-os],         [enable IMC operating system module.])
 ARG_ENABL_SET([imv-os],         [enable IMV operating system module.])
 ARG_ENABL_SET([imc-attestation],[enable IMC attestation module.])
 ARG_ENABL_SET([imv-attestation],[enable IMV attestation module.])
-ARG_ENABL_SET([imc-swid],       [enable IMC swid module.])
-ARG_ENABL_SET([imv-swid],       [enable IMV swid module.])
+ARG_ENABL_SET([imc-swima],      [enable IMC swima module.])
+ARG_ENABL_SET([imv-swima],      [enable IMV swima module.])
 ARG_ENABL_SET([imc-hcd],        [enable IMC hcd module.])
 ARG_ENABL_SET([imv-hcd],        [enable IMV hcd module.])
 ARG_ENABL_SET([tnc-ifmap],      [enable TNC IF-MAP module. Requires libxml])
@@ -275,6 +277,7 @@ ARG_ENABL_SET([android-log],    [enable Android specific logger plugin.])
 ARG_ENABL_SET([bypass-lan],     [enable plugin to install bypass policies for local subnets.])
 ARG_ENABL_SET([certexpire],     [enable CSV export of expiration dates of used certificates.])
 ARG_ENABL_SET([connmark],       [enable connmark plugin using conntrack based marks to select return path SA.])
+ARG_ENABL_SET([counters],       [enable plugin that collects several performance counters.])
 ARG_ENABL_SET([forecast],       [enable forecast plugin forwarding broadcast/multicast messages.])
 ARG_ENABL_SET([duplicheck],     [advanced duplicate checking plugin using liveness checks.])
 ARG_ENABL_SET([error-notify],   [enable error notification plugin.])
@@ -284,6 +287,7 @@ ARG_ENABL_SET([led],            [enable plugin to control LEDs on IKEv2 activity
 ARG_ENABL_SET([load-tester],    [enable load testing plugin for IKEv2 daemon.])
 ARG_ENABL_SET([lookip],         [enable fast virtual IP lookup and notification plugin.])
 ARG_ENABL_SET([radattr],        [enable plugin to inject and process custom RADIUS attributes as IKEv2 client.])
+ARG_ENABL_SET([save-keys],      [enable development/debugging plugin that saves IKE and ESP keys in Wireshark format.])
 ARG_ENABL_SET([systime-fix],    [enable plugin to handle cert lifetimes with invalid system time gracefully.])
 ARG_ENABL_SET([test-vectors],   [enable plugin providing crypto test vectors.])
 ARG_DISBL_SET([updown],         [disable updown firewall script plugin.])
@@ -292,7 +296,6 @@ ARG_ENABL_SET([aikgen],         [enable AIK generator for TPM 1.2.])
 ARG_DISBL_SET([charon],         [disable the IKEv1/IKEv2 keying daemon charon.])
 ARG_ENABL_SET([cmd],            [enable the command line IKE client charon-cmd.])
 ARG_ENABL_SET([conftest],       [enforce Suite B conformance test framework.])
-ARG_ENABL_SET([dumm],           [enable the DUMM UML test framework.])
 ARG_ENABL_SET([fast],           [enable libfast (FastCGI Application Server w/ templates.])
 ARG_ENABL_SET([fuzzing],        [enable fuzzing scripts (found in directory fuzz).])
 ARG_ENABL_SET([libipsec],       [enable user space IPsec implementation.])
@@ -390,6 +393,21 @@ AC_PATH_PROG([GPERF], [gperf], [], [$PATH:/bin:/usr/bin:/usr/local/bin])
 AC_MSG_CHECKING([gperf version >= 3.0.0])
 if test -x "$GPERF"; then
 	if test "`$GPERF --version | $AWK -F' ' '/^GNU gperf/ { print $3 }' | $AWK -F. '{ print $1 }'`" -ge "3"; then
+		GPERF_OUTPUT="`echo foo | ${GPERF}`"
+		AC_COMPILE_IFELSE(
+			[AC_LANG_PROGRAM(
+				[[#include <string.h>
+				  const char *in_word_set(const char*, size_t); $GPERF_OUTPUT]])],
+			[GPERF_LEN_TYPE=size_t],
+			[AC_COMPILE_IFELSE(
+				[AC_LANG_PROGRAM(
+					[[#include <string.h>
+					  const char *in_word_set(const char*, unsigned); $GPERF_OUTPUT]])],
+				[GPERF_LEN_TYPE=unsigned],
+				[AC_MSG_ERROR([unable to determine gperf len type])]
+			)]
+		)
+		AC_SUBST(GPERF_LEN_TYPE)
 		AC_MSG_RESULT([yes])
 	else
 		AC_MSG_RESULT([no])
@@ -428,7 +446,7 @@ if test x$eap_radius = xtrue -o x$radattr = xtrue -o x$tnc_pdp = xtrue; then
 	radius=true;
 fi
 
-if test x$tnc_imc = xtrue -o x$tnc_imv = xtrue -o x$tnccs_11 = xtrue -o x$tnccs_11 = xtrue -o x$tnccs_dynamic = xtrue -o x$eap_tnc = xtrue; then
+if test x$tnc_imc = xtrue -o x$tnc_imv = xtrue -o x$tnccs_11 = xtrue -o x$tnccs_20 = xtrue -o x$tnccs_dynamic = xtrue -o x$eap_tnc = xtrue; then
 	tnc_tnccs=true;
 fi
 
@@ -436,7 +454,7 @@ if test x$eap_tls = xtrue -o x$eap_ttls = xtrue -o x$eap_peap = xtrue -o x$tnc_t
 	tls=true;
 fi
 
-if test x$imc_test = xtrue -o x$imv_test = xtrue -o x$imc_scanner = xtrue -o x$imv_scanner = xtrue -o x$imc_os = xtrue -o x$imv_os = xtrue -o x$imc_attestation = xtrue -o x$imv_attestation = xtrue -o x$imc_swid = xtrue -o x$imv_swid = xtrue -o x$imc_hcd = xtrue -o x$imv_hcd = xtrue; then
+if test x$imc_test = xtrue -o x$imv_test = xtrue -o x$imc_scanner = xtrue -o x$imv_scanner = xtrue -o x$imc_os = xtrue -o x$imv_os = xtrue -o x$imc_attestation = xtrue -o x$imv_attestation = xtrue -o x$imc_swima = xtrue -o x$imv_swima = xtrue -o x$imc_hcd = xtrue -o x$imv_hcd = xtrue; then
 	imcv=true;
 fi
 
@@ -483,8 +501,12 @@ if test x$aikgen = xtrue; then
 	tss_trousers=true
 fi
 
-if test x$ntru = xtrue -o x$bliss = xtrue; then
+if test x$gmp = xtrue -o x$ntru = xtrue -o x$bliss = xtrue; then
 	mgf1=true
+fi
+
+if test x$stroke = xtrue; then
+	counters=true
 fi
 
 # ===========================================
@@ -839,7 +861,7 @@ AC_COMPILE_IFELSE(
 	[
 		AC_MSG_RESULT([yes])
 		windows=true
-		openssl_lib=eay32
+
 		AC_SUBST(PTHREADLIB, "")
 		# explicitly disable ms-bitfields, as it breaks __attribute__((packed))
 		case "$CFLAGS" in
@@ -849,7 +871,6 @@ AC_COMPILE_IFELSE(
 	],
 	[
 		AC_MSG_RESULT([no])
-		openssl_lib=crypto
 
 		# check for clock_gettime() on non-Windows only. Otherwise this
 		# check might find clock_gettime() in libwinpthread, but we don't want
@@ -863,7 +884,6 @@ AC_COMPILE_IFELSE(
 		LIBS=$saved_LIBS
 	]
 )
-AC_SUBST(OPENSSL_LIB, [-l$openssl_lib])
 AM_CONDITIONAL(USE_WINDOWS, [test "x$windows" = xtrue])
 
 AC_MSG_CHECKING([for working __attribute__((packed))])
@@ -931,9 +951,9 @@ if test x$gmp = xtrue; then
 		AC_COMPILE_IFELSE(
 			[AC_LANG_PROGRAM(
 				[[#include "gmp.h"]],
-				[[void *x = mpz_powm_sec;]])],
+				[[void *x  __attribute__((unused)); x = mpz_powm_sec;]])],
 			[AC_MSG_RESULT([yes]);
-			 AC_DEFINE([HAVE_MPZ_POWM_SEC], [], [have mpz_mown_sec()])],
+			 AC_DEFINE([HAVE_MPZ_POWM_SEC], [], [have mpz_powm_sec()])],
 			[AC_MSG_RESULT([no])]
 		)
 	else
@@ -1001,6 +1021,10 @@ if test x$systemd = xtrue; then
 		 AC_SUBST(systemd_journal_CFLAGS)
 		 AC_SUBST(systemd_journal_LIBS)]
 	)
+	saved_LIBS=$LIBS
+	LIBS="$systemd_LIBS $systemd_daemon_LIBS"
+	AC_CHECK_FUNCS(sd_listen_fds_with_names)
+	LIBS=$saved_LIBS
 fi
 
 if test x$tss_trousers = xtrue; then
@@ -1010,28 +1034,36 @@ if test x$tss_trousers = xtrue; then
 fi
 
 if test x$tss_tss2 = xtrue; then
-	PKG_CHECK_MODULES(tss2, [tcti-socket], [AC_DEFINE([TSS_TSS2], [], [use TSS 2.0 libraries])])
-	AC_SUBST(tss2_CFLAGS)
-	AC_SUBST(tss2_LIBS)
+	PKG_CHECK_MODULES(tss2_sys, [tss2-sys],
+		[tss2_sys=true; AC_DEFINE([TSS2_SYS], [], [use TSS2 v2 System API])],
+		[tss2_sys=false])
+	PKG_CHECK_MODULES(tss2_esys, [tss2-esys],
+		[tss2_esys=true; AC_DEFINE([TSS2_ESYS], [], [use TSS2 v2 Extended System API])],
+		[tss2_esys=false])
+	PKG_CHECK_MODULES(tss2_tabrmd, [tcti-tabrmd],
+		[tss2_tabrmd=true; AC_DEFINE([TSS2_TCTI_TABRMD], [], [use TCTI Access Broker and Resource Mamager])],
+		[tss2_tabrmd=false])
+	PKG_CHECK_MODULES(tss2_socket, [tcti-socket],
+		[tss2_socket=true; AC_DEFINE([TSS2_TCTI_SOCKET], [], [use TCTI Sockets])],
+		[tss2_socket=false])
+	if test x$tss2_sys = xtrue; then
+		AC_DEFINE([TSS_TSS2_V2], [], [use TSS 2.0 v2 libraries])
+		AC_SUBST(tss2_CFLAGS, "$tss2_sys_CFLAGS")
+		AC_SUBST(tss2_LIBS, "$tss2_sys_LIBS")
+	elif test x$tss2_tabrmd = xtrue -o x$tss2_socket = xtrue; then
+		AC_DEFINE([TSS_TSS2_V1], [], [use TSS 2.0 v1 libraries])
+		AC_SUBST(tss2_CFLAGS, "$tss2_tabrmd_CFLAGS $tss2_socket_CFLAGS")
+		AC_SUBST(tss2_LIBS, "$tss2_tabrmd_LIBS $tss2_socket_LIBS")
+	else
+		AC_MSG_FAILURE([no TSS2 TCTI or SAPI libraries detected])
+	fi
 fi
 
-if test x$imv_swid = xtrue; then
+if test x$imc_swima = xtrue -o $imv_swima = xtrue; then
 	PKG_CHECK_MODULES(json, [json-c], [],
 		[PKG_CHECK_MODULES(json, [json])])
 	AC_SUBST(json_CFLAGS)
 	AC_SUBST(json_LIBS)
-fi
-
-if test x$dumm = xtrue; then
-	PKG_CHECK_MODULES(gtk, [gtk+-2.0 vte])
-	AC_SUBST(gtk_CFLAGS)
-	AC_SUBST(gtk_LIBS)
-	AC_CHECK_PROGS(RUBY, ruby)
-	PKG_CHECK_MODULES(ruby, [ruby])
-	saved_LIBS=$LIBS
-	LIBS=$ruby_LIBS
-	AC_CHECK_FUNCS(rb_errinfo)
-	LIBS=$saved_LIBS
 fi
 
 if test x$fast = xtrue; then
@@ -1105,8 +1137,17 @@ if test x$sqlite = xtrue; then
 fi
 
 if test x$openssl = xtrue; then
-	AC_CHECK_LIB([$openssl_lib],[EVP_CIPHER_CTX_new],[LIBS="$LIBS"],
-				 [AC_MSG_ERROR([OpenSSL lib$openssl_lib not found])],[$DLLIB])
+	if test "x$windows" = xtrue; then
+		openssl_lib=eay32
+		AC_CHECK_LIB([$openssl_lib],[EVP_CIPHER_CTX_new],[LIBS="$LIBS"],
+			[AC_MSG_RESULT([no]);openssl_lib=""],[$DLLIB])
+	fi
+	if test -z "$openssl_lib"; then
+		openssl_lib=crypto
+		AC_CHECK_LIB([$openssl_lib],[EVP_CIPHER_CTX_new],[LIBS="$LIBS"],
+			[AC_MSG_ERROR([OpenSSL lib$openssl_lib not found])],[$DLLIB])
+	fi
+	AC_SUBST(OPENSSL_LIB, [-l$openssl_lib])
 	AC_CHECK_HEADER([openssl/evp.h],,[AC_MSG_ERROR([OpenSSL header openssl/evp.h not found!])])
 fi
 
@@ -1122,6 +1163,12 @@ if test x$gcrypt = xtrue; then
 		 AC_DEFINE([HAVE_GCRY_CIPHER_CAMELLIA], [], [have GCRY_CIPHER_CAMELLIA128])],
 		[AC_MSG_RESULT([no])]
 	)
+fi
+
+if test x$botan = xtrue; then
+	PKG_CHECK_MODULES(botan, [botan-2])
+	AC_SUBST(botan_CFLAGS)
+	AC_SUBST(botan_LIBS)
 fi
 
 if test x$uci = xtrue; then
@@ -1145,10 +1192,7 @@ if test x$eap_sim_pcsc = xtrue; then
 fi
 
 if test x$nm = xtrue; then
-	PKG_CHECK_EXISTS([libnm-glib],
-		[PKG_CHECK_MODULES(nm, [NetworkManager gthread-2.0 libnm-util libnm-glib libnm-glib-vpn])],
-		[PKG_CHECK_MODULES(nm, [NetworkManager gthread-2.0 libnm_util libnm_glib libnm_glib_vpn])]
-	)
+	PKG_CHECK_MODULES(nm, [gthread-2.0 libnm])
 	AC_SUBST(nm_CFLAGS)
 	AC_SUBST(nm_LIBS)
 fi
@@ -1255,6 +1299,18 @@ if test x$coverage = xtrue; then
 	CFLAGS="${CFLAGS} -g -O0"
 fi
 
+if test x$fuzzing = xtrue; then
+	if test x$libfuzzer = x; then
+		AC_MSG_NOTICE([fuzz targets enabled without libFuzzer, using local driver])
+		CFLAGS="${CFLAGS} -fsanitize=address"
+		libfuzzer="libFuzzerLocal.a"
+	else
+		# required for libFuzzer
+		FUZZING_LDFLAGS="-stdlib=libc++ -lstdc++"
+		AC_SUBST(FUZZING_LDFLAGS)
+	fi
+fi
+
 if test x$ruby_gems = xtrue; then
 	AC_PATH_PROG([GEM], [gem], [], [$PATH:/bin:/usr/bin:/usr/local/bin])
 	if test x$GEM = x; then
@@ -1351,7 +1407,7 @@ ADD_PLUGIN([x509],                 [s charon scepclient pki scripts attest nm cm
 ADD_PLUGIN([revocation],           [s charon pki nm cmd])
 ADD_PLUGIN([constraints],          [s charon nm cmd])
 ADD_PLUGIN([acert],                [s charon])
-ADD_PLUGIN([pubkey],               [s charon cmd aikgen])
+ADD_PLUGIN([pubkey],               [s charon pki cmd aikgen])
 ADD_PLUGIN([pkcs1],                [s charon scepclient pki scripts manager medsrv attest nm cmd aikgen fuzz])
 ADD_PLUGIN([pkcs7],                [s charon scepclient pki scripts nm cmd])
 ADD_PLUGIN([pkcs8],                [s charon scepclient pki scripts manager medsrv attest nm cmd])
@@ -1365,6 +1421,7 @@ ADD_PLUGIN([pem],                  [s charon scepclient pki scripts manager meds
 ADD_PLUGIN([padlock],              [s charon])
 ADD_PLUGIN([openssl],              [s charon scepclient pki scripts manager medsrv attest nm cmd aikgen])
 ADD_PLUGIN([gcrypt],               [s charon scepclient pki scripts manager medsrv attest nm cmd aikgen])
+ADD_PLUGIN([botan],                [s charon scepclient pki scripts manager medsrv attest nm cmd aikgen])
 ADD_PLUGIN([af-alg],               [s charon scepclient pki scripts medsrv attest nm cmd aikgen])
 ADD_PLUGIN([fips-prf],             [s charon nm cmd])
 ADD_PLUGIN([gmp],                  [s charon scepclient pki scripts manager medsrv attest nm cmd aikgen fuzz])
@@ -1398,6 +1455,7 @@ ADD_PLUGIN([kernel-pfroute],       [c charon starter nm cmd])
 ADD_PLUGIN([kernel-netlink],       [c charon starter nm cmd])
 ADD_PLUGIN([kernel-vpp],           [c charon starter nm cmd])
 ADD_PLUGIN([resolve],              [c charon cmd])
+ADD_PLUGIN([save-keys],            [c])
 ADD_PLUGIN([socket-default],       [c charon nm cmd])
 ADD_PLUGIN([socket-dynamic],       [c charon cmd])
 ADD_PLUGIN([socket-win],           [c charon])
@@ -1415,6 +1473,7 @@ ADD_PLUGIN([eap-sim],              [c charon])
 ADD_PLUGIN([eap-sim-file],         [c charon])
 ADD_PLUGIN([eap-sim-pcsc],         [c charon])
 ADD_PLUGIN([eap-aka],              [c charon])
+ADD_PLUGIN([eap-aka-3gpp],         [c charon])
 ADD_PLUGIN([eap-aka-3gpp2],        [c charon])
 ADD_PLUGIN([eap-simaka-sql],       [c charon])
 ADD_PLUGIN([eap-simaka-pseudonym], [c charon])
@@ -1461,6 +1520,7 @@ ADD_PLUGIN([radattr],              [c charon])
 ADD_PLUGIN([uci],                  [c charon])
 ADD_PLUGIN([addrblock],            [c charon])
 ADD_PLUGIN([unity],                [c charon])
+ADD_PLUGIN([counters],             [c charon])
 
 AC_SUBST(charon_plugins)
 AC_SUBST(starter_plugins)
@@ -1532,6 +1592,7 @@ AM_CONDITIONAL(USE_SQLITE, test x$sqlite = xtrue)
 AM_CONDITIONAL(USE_PADLOCK, test x$padlock = xtrue)
 AM_CONDITIONAL(USE_OPENSSL, test x$openssl = xtrue)
 AM_CONDITIONAL(USE_GCRYPT, test x$gcrypt = xtrue)
+AM_CONDITIONAL(USE_BOTAN, test x$botan = xtrue)
 AM_CONDITIONAL(USE_AGENT, test x$agent = xtrue)
 AM_CONDITIONAL(USE_KEYCHAIN, test x$keychain = xtrue)
 AM_CONDITIONAL(USE_PKCS11, test x$pkcs11 = xtrue)
@@ -1591,6 +1652,7 @@ AM_CONDITIONAL(USE_EAP_IDENTITY, test x$eap_identity = xtrue)
 AM_CONDITIONAL(USE_EAP_MD5, test x$eap_md5 = xtrue)
 AM_CONDITIONAL(USE_EAP_GTC, test x$eap_gtc = xtrue)
 AM_CONDITIONAL(USE_EAP_AKA, test x$eap_aka = xtrue)
+AM_CONDITIONAL(USE_EAP_AKA_3GPP, test x$eap_aka_3gpp = xtrue)
 AM_CONDITIONAL(USE_EAP_AKA_3GPP2, test x$eap_aka_3gpp2 = xtrue)
 AM_CONDITIONAL(USE_EAP_MSCHAPV2, test x$eap_mschapv2 = xtrue)
 AM_CONDITIONAL(USE_EAP_TLS, test x$eap_tls = xtrue)
@@ -1619,10 +1681,11 @@ AM_CONDITIONAL(USE_IMC_OS, test x$imc_os = xtrue)
 AM_CONDITIONAL(USE_IMV_OS, test x$imv_os = xtrue)
 AM_CONDITIONAL(USE_IMC_ATTESTATION, test x$imc_attestation = xtrue)
 AM_CONDITIONAL(USE_IMV_ATTESTATION, test x$imv_attestation = xtrue)
-AM_CONDITIONAL(USE_IMC_SWID, test x$imc_swid = xtrue)
-AM_CONDITIONAL(USE_IMV_SWID, test x$imv_swid = xtrue)
+AM_CONDITIONAL(USE_IMC_SWIMA, test x$imc_swima = xtrue)
+AM_CONDITIONAL(USE_IMV_SWIMA, test x$imv_swima = xtrue)
 AM_CONDITIONAL(USE_IMC_HCD, test x$imc_hcd = xtrue)
 AM_CONDITIONAL(USE_IMV_HCD, test x$imv_hcd = xtrue)
+AM_CONDITIONAL(USE_SAVE_KEYS, test x$save_keys = xtrue)
 AM_CONDITIONAL(USE_SOCKET_DEFAULT, test x$socket_default = xtrue)
 AM_CONDITIONAL(USE_SOCKET_DYNAMIC, test x$socket_dynamic = xtrue)
 AM_CONDITIONAL(USE_SOCKET_WIN, test x$socket_win = xtrue)
@@ -1635,12 +1698,12 @@ AM_CONDITIONAL(USE_UNITY, test x$unity = xtrue)
 AM_CONDITIONAL(USE_RESOLVE, test x$resolve = xtrue)
 AM_CONDITIONAL(USE_ATTR, test x$attr = xtrue)
 AM_CONDITIONAL(USE_ATTR_SQL, test x$attr_sql = xtrue)
+AM_CONDITIONAL(USE_COUNTERS, test x$counters = xtrue)
 
 #  other options
 # ---------------
 AM_CONDITIONAL(USE_LEAK_DETECTIVE, test x$leak_detective = xtrue)
 AM_CONDITIONAL(USE_LOCK_PROFILER, test x$lock_profiler = xtrue)
-AM_CONDITIONAL(USE_DUMM, test x$dumm = xtrue)
 AM_CONDITIONAL(USE_FAST, test x$fast = xtrue)
 AM_CONDITIONAL(USE_MANAGER, test x$manager = xtrue)
 AM_CONDITIONAL(USE_ME, test x$mediation = xtrue)
@@ -1664,7 +1727,7 @@ AM_CONDITIONAL(USE_LIBNTTFFT, test x$bliss = xtrue -o x$newhope = xtrue)
 AM_CONDITIONAL(USE_LIBTNCIF, test x$tnc_tnccs = xtrue -o x$imcv = xtrue)
 AM_CONDITIONAL(USE_LIBTNCCS, test x$tnc_tnccs = xtrue)
 AM_CONDITIONAL(USE_LIBPTTLS, test x$tnc_tnccs = xtrue)
-AM_CONDITIONAL(USE_LIBTPMTSS, test x$tss_trousers = xtrue -o x$tss_tss2 = xtrue -o x$tpm -o x$aikgen = xtrue -o x$imcv = xtrue)
+AM_CONDITIONAL(USE_LIBTPMTSS, test x$tss_trousers = xtrue -o x$tss_tss2 = xtrue -o x$tpm = xtrue -o x$aikgen = xtrue -o x$imcv = xtrue)
 AM_CONDITIONAL(USE_FILE_CONFIG, test x$stroke = xtrue)
 AM_CONDITIONAL(USE_IPSEC_SCRIPT, test x$stroke = xtrue -o x$scepclient = xtrue -o x$conftest = xtrue)
 AM_CONDITIONAL(USE_LIBCAP, test x$capabilities = xlibcap)
@@ -1721,6 +1784,9 @@ fi
 if test x$fuzzing = xtrue; then
 	AC_DEFINE([USE_FUZZING], [], [build code for fuzzing])
 fi
+if test x$imc_swima = xtrue -o x$imv_swima = xtrue; then
+	AC_DEFINE([USE_JSON], [], [build code for JSON])
+fi
 
 # ====================================================
 #  options for enabled modules (see conf/Makefile.am)
@@ -1734,7 +1800,7 @@ AM_COND_IF([USE_CHARON], [strongswan_options=${strongswan_options}" charon charo
 AM_COND_IF([USE_FILE_CONFIG], [strongswan_options=${strongswan_options}" starter"])
 AM_COND_IF([USE_IMV_ATTESTATION], [strongswan_options=${strongswan_options}" attest"])
 AM_COND_IF([USE_IMCV], [strongswan_options=${strongswan_options}" imcv"])
-AM_COND_IF([USE_IMV_OS], [strongswan_options=${strongswan_options}" pacman"])
+AM_COND_IF([USE_IMV_SWIMA], [strongswan_options=${strongswan_options}" sec-updater"])
 AM_COND_IF([USE_LIBTNCCS], [strongswan_options=${strongswan_options}" tnc"])
 AM_COND_IF([USE_MANAGER], [strongswan_options=${strongswan_options}" manager"])
 AM_COND_IF([USE_MEDSRV], [strongswan_options=${strongswan_options}" medsrv"])
@@ -1806,6 +1872,7 @@ AC_CONFIG_FILES([
 	src/libstrongswan/plugins/padlock/Makefile
 	src/libstrongswan/plugins/openssl/Makefile
 	src/libstrongswan/plugins/gcrypt/Makefile
+	src/libstrongswan/plugins/botan/Makefile
 	src/libstrongswan/plugins/agent/Makefile
 	src/libstrongswan/plugins/keychain/Makefile
 	src/libstrongswan/plugins/pkcs11/Makefile
@@ -1845,8 +1912,8 @@ AC_CONFIG_FILES([
 	src/libimcv/plugins/imv_os/Makefile
 	src/libimcv/plugins/imc_attestation/Makefile
 	src/libimcv/plugins/imv_attestation/Makefile
-	src/libimcv/plugins/imc_swid/Makefile
-	src/libimcv/plugins/imv_swid/Makefile
+	src/libimcv/plugins/imc_swima/Makefile
+	src/libimcv/plugins/imv_swima/Makefile
 	src/libimcv/plugins/imc_hcd/Makefile
 	src/libimcv/plugins/imv_hcd/Makefile
 	src/charon/Makefile
@@ -1857,6 +1924,8 @@ AC_CONFIG_FILES([
 	src/charon-systemd/Makefile
 	src/libcharon/Makefile
 	src/libcharon/plugins/eap_aka/Makefile
+	src/libcharon/plugins/eap_aka_3gpp/Makefile
+	src/libcharon/plugins/eap_aka_3gpp/tests/Makefile
 	src/libcharon/plugins/eap_aka_3gpp2/Makefile
 	src/libcharon/plugins/eap_dynamic/Makefile
 	src/libcharon/plugins/eap_identity/Makefile
@@ -1880,11 +1949,13 @@ AC_CONFIG_FILES([
 	src/libcharon/plugins/xauth_noauth/Makefile
 	src/libcharon/plugins/tnc_ifmap/Makefile
 	src/libcharon/plugins/tnc_pdp/Makefile
+	src/libcharon/plugins/save_keys/Makefile
 	src/libcharon/plugins/socket_default/Makefile
 	src/libcharon/plugins/socket_dynamic/Makefile
 	src/libcharon/plugins/socket_win/Makefile
 	src/libcharon/plugins/bypass_lan/Makefile
 	src/libcharon/plugins/connmark/Makefile
+	src/libcharon/plugins/counters/Makefile
 	src/libcharon/plugins/forecast/Makefile
 	src/libcharon/plugins/farp/Makefile
 	src/libcharon/plugins/smp/Makefile
@@ -1940,17 +2011,18 @@ AC_CONFIG_FILES([
 	src/_copyright/Makefile
 	src/scepclient/Makefile
 	src/aikgen/Makefile
+	src/tpm_extendpcr/Makefile
 	src/pki/Makefile
 	src/pki/man/Makefile
 	src/pool/Makefile
-	src/dumm/Makefile
-	src/dumm/ext/extconf.rb
 	src/libfast/Makefile
 	src/manager/Makefile
 	src/medsrv/Makefile
 	src/checksum/Makefile
 	src/conftest/Makefile
 	src/pt-tls-client/Makefile
+	src/sw-collector/Makefile
+	src/sec-updater/Makefile
 	src/swanctl/Makefile
 	scripts/Makefile
 	testing/Makefile
@@ -1984,6 +2056,9 @@ AC_CONFIG_FILES([
 	src/swanctl/swanctl.8
 	src/swanctl/swanctl.conf.5.head
 	src/swanctl/swanctl.conf.5.tail
+	src/pt-tls-client/pt-tls-client.1
+	src/sw-collector/sw-collector.8
+	src/sec-updater/sec-updater.8
 ])
 
 AC_OUTPUT

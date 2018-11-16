@@ -2,7 +2,7 @@
  * Copyright (C) 2008-2013 Tobias Brunner
  * Copyright (C) 2005-2006 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -478,7 +478,7 @@ chunk_t chunk_to_hex(chunk_t chunk, char *buf, bool uppercase)
 }
 
 /**
- * convert a signle hex character to its binary value
+ * convert a single hex character to its binary value
  */
 static char hex2bin(char hex)
 {
@@ -859,7 +859,7 @@ static inline uint64_t siplast(size_t len, u_char *pos)
 }
 
 /**
- * Caculate SipHash-2-4 with an optional first block given as argument.
+ * Calculate SipHash-2-4 with an optional first block given as argument.
  */
 static uint64_t chunk_mac_inc(chunk_t chunk, u_char *key, uint64_t m)
 {

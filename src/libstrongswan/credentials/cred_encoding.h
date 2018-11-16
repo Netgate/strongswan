@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -25,7 +25,7 @@ typedef struct cred_encoding_t cred_encoding_t;
 typedef enum cred_encoding_type_t cred_encoding_type_t;
 typedef enum cred_encoding_part_t cred_encoding_part_t;
 
-#include <library.h>
+#include <utils/chunk.h>
 
 /**
  * Credential encoder function implementing encoding/fingerprinting.

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2016 Tobias Brunner
+ * Copyright (C) 2012-2018 Tobias Brunner
  * Copyright (C) 2012 Giuliano Grassi
  * Copyright (C) 2012 Ralf Sager
  * HSR Hochschule fuer Technik Rapperswil
@@ -18,6 +18,11 @@
 package org.strongswan.android.data;
 
 
+import android.text.TextUtils;
+
+import java.util.Arrays;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.UUID;
 
 public class VpnProfile implements Cloneable
@@ -26,12 +31,39 @@ public class VpnProfile implements Cloneable
 	public static final int SPLIT_TUNNELING_BLOCK_IPV4 = 1;
 	public static final int SPLIT_TUNNELING_BLOCK_IPV6 = 2;
 
+	public static final int FLAGS_SUPPRESS_CERT_REQS = 1 << 0;
+	public static final int FLAGS_DISABLE_CRL = 1 << 1;
+	public static final int FLAGS_DISABLE_OCSP = 1 << 2;
+	public static final int FLAGS_STRICT_REVOCATION = 1 << 3;
+	public static final int FLAGS_RSA_PSS = 1 << 4;
+
 	private String mName, mGateway, mUsername, mPassword, mCertificate, mUserCertificate;
-	private String mRemoteId, mLocalId;
-	private Integer mMTU, mPort, mSplitTunneling;
+	private String mRemoteId, mLocalId, mExcludedSubnets, mIncludedSubnets, mSelectedApps;
+	private String mIkeProposal, mEspProposal;
+	private Integer mMTU, mPort, mSplitTunneling, mNATKeepAlive, mFlags;
+	private SelectedAppsHandling mSelectedAppsHandling = SelectedAppsHandling.SELECTED_APPS_DISABLE;
 	private VpnType mVpnType;
 	private UUID mUUID;
 	private long mId = -1;
+
+	public enum SelectedAppsHandling
+	{
+		SELECTED_APPS_DISABLE(0),
+		SELECTED_APPS_EXCLUDE(1),
+		SELECTED_APPS_ONLY(2);
+
+		private Integer mValue;
+
+		SelectedAppsHandling(int value)
+		{
+			mValue = value;
+		}
+
+		public Integer getValue()
+		{
+			return mValue;
+		}
+	}
 
 	public VpnProfile()
 	{
@@ -86,6 +118,26 @@ public class VpnProfile implements Cloneable
 	public void setVpnType(VpnType type)
 	{
 		this.mVpnType = type;
+	}
+
+	public String getIkeProposal()
+	{
+		return mIkeProposal;
+	}
+
+	public void setIkeProposal(String proposal)
+	{
+		this.mIkeProposal = proposal;
+	}
+
+	public String getEspProposal()
+	{
+		return mEspProposal;
+	}
+
+	public void setEspProposal(String proposal)
+	{
+		this.mEspProposal = proposal;
 	}
 
 	public String getUsername()
@@ -168,6 +220,84 @@ public class VpnProfile implements Cloneable
 		this.mPort = port;
 	}
 
+	public Integer getNATKeepAlive()
+	{
+		return mNATKeepAlive;
+	}
+
+	public void setNATKeepAlive(Integer keepalive)
+	{
+		this.mNATKeepAlive = keepalive;
+	}
+
+	public void setExcludedSubnets(String excludedSubnets)
+	{
+		this.mExcludedSubnets = excludedSubnets;
+	}
+
+	public String getExcludedSubnets()
+	{
+		return mExcludedSubnets;
+	}
+
+	public void setIncludedSubnets(String includedSubnets)
+	{
+		this.mIncludedSubnets = includedSubnets;
+	}
+
+	public String getIncludedSubnets()
+	{
+		return mIncludedSubnets;
+	}
+
+	public void setSelectedApps(String selectedApps)
+	{
+		this.mSelectedApps = selectedApps;
+	}
+
+	public void setSelectedApps(SortedSet<String> selectedApps)
+	{
+		this.mSelectedApps = selectedApps.size() > 0 ? TextUtils.join(" ", selectedApps) : null;
+	}
+
+	public String getSelectedApps()
+	{
+		return mSelectedApps;
+	}
+
+	public SortedSet<String> getSelectedAppsSet()
+	{
+		TreeSet<String> set = new TreeSet<>();
+		if (!TextUtils.isEmpty(mSelectedApps))
+		{
+			set.addAll(Arrays.asList(mSelectedApps.split("\\s+")));
+		}
+		return set;
+	}
+
+	public void setSelectedAppsHandling(SelectedAppsHandling selectedAppsHandling)
+	{
+		this.mSelectedAppsHandling = selectedAppsHandling;
+	}
+
+	public void setSelectedAppsHandling(Integer value)
+	{
+		mSelectedAppsHandling = SelectedAppsHandling.SELECTED_APPS_DISABLE;
+		for (SelectedAppsHandling handling : SelectedAppsHandling.values())
+		{
+			if (handling.mValue.equals(value))
+			{
+				mSelectedAppsHandling = handling;
+				break;
+			}
+		}
+	}
+
+	public SelectedAppsHandling getSelectedAppsHandling()
+	{
+		return mSelectedAppsHandling;
+	}
+
 	public Integer getSplitTunneling()
 	{
 		return mSplitTunneling;
@@ -176,6 +306,16 @@ public class VpnProfile implements Cloneable
 	public void setSplitTunneling(Integer splitTunneling)
 	{
 		this.mSplitTunneling = splitTunneling;
+	}
+
+	public Integer getFlags()
+	{
+		return mFlags == null ? 0 : mFlags;
+	}
+
+	public void setFlags(Integer flags)
+	{
+		this.mFlags = flags;
 	}
 
 	@Override

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2011-2015 Tobias Brunner
+ * Copyright (C) 2011-2017 Tobias Brunner
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -158,9 +158,33 @@ CALLBACK(acquire_by_dst, bool,
 	return this->dst && this->dst->ip_equals(this->dst, dst);
 }
 
-METHOD(trap_manager_t, install, uint32_t,
-	private_trap_manager_t *this, peer_cfg_t *peer, child_cfg_t *child,
-	uint32_t reqid)
+/**
+ * Check if any remote TS are dynamic
+ */
+static bool dynamic_remote_ts(child_cfg_t *child)
+{
+	enumerator_t *enumerator;
+	linked_list_t *other_ts;
+	traffic_selector_t *ts;
+	bool found = FALSE;
+
+	other_ts = child->get_traffic_selectors(child, FALSE, NULL, NULL, FALSE);
+	enumerator = other_ts->create_enumerator(other_ts);
+	while (enumerator->enumerate(enumerator, &ts))
+	{
+		if (ts->is_dynamic(ts))
+		{
+			found = TRUE;
+			break;
+		}
+	}
+	enumerator->destroy(enumerator);
+	other_ts->destroy_offset(other_ts, offsetof(traffic_selector_t, destroy));
+	return found;
+}
+
+METHOD(trap_manager_t, install, bool,
+	private_trap_manager_t *this, peer_cfg_t *peer, child_cfg_t *child)
 {
 	entry_t *entry, *found = NULL;
 	ike_cfg_t *ike_cfg;
@@ -172,7 +196,7 @@ METHOD(trap_manager_t, install, uint32_t,
 	linked_list_t *proposals;
 	proposal_t *proposal;
 	protocol_id_t proto = PROTO_ESP;
-	bool wildcard = FALSE;
+	bool result = FALSE, wildcard = FALSE;
 
 	/* try to resolve addresses */
 	ike_cfg = peer->get_ike_cfg(peer);
@@ -184,25 +208,39 @@ METHOD(trap_manager_t, install, uint32_t,
 		me = host_create_any(other->get_family(other));
 		wildcard = TRUE;
 	}
-	else if (!other || other->is_anyaddr(other))
+	else if (other && other->is_anyaddr(other))
 	{
-		DESTROY_IF(other);
+		other->destroy(other);
 		DBG1(DBG_CFG, "installing trap failed, remote address unknown");
-		return 0;
+		return FALSE;
 	}
 	else
-	{
-		me = ike_cfg->resolve_me(ike_cfg, other->get_family(other));
-		if (!me || me->is_anyaddr(me))
+	{	/* depending on the traffic selectors we don't really need a remote
+		 * host yet, but we might fail later if no IP can be resolved */
+		if (!other && dynamic_remote_ts(child))
+		{	/* with dynamic TS we do need a host, otherwise 0.0.0.0/0 is used,
+			 * which is probably not what users expect*/
+			DBG1(DBG_CFG, "installing trap failed, remote address unknown with "
+				 "dynamic traffic selector");
+			return FALSE;
+		}
+		me = ike_cfg->resolve_me(ike_cfg, other ? other->get_family(other)
+												: AF_UNSPEC);
+		if (!other)
+		{
+			other = host_create_any(me ? me->get_family(me) : AF_INET);
+		}
+		other->set_port(other, ike_cfg->get_other_port(ike_cfg));
+		if ((!me || me->is_anyaddr(me)) && !other->is_anyaddr(other))
 		{
 			DESTROY_IF(me);
 			me = charon->kernel->get_source_addr(charon->kernel, other, NULL);
-			if (!me)
-			{
-				me = host_create_any(other->get_family(other));
-			}
-			me->set_port(me, ike_cfg->get_my_port(ike_cfg));
 		}
+		if (!me)
+		{
+			me = host_create_any(other->get_family(other));
+		}
+		me->set_port(me, ike_cfg->get_my_port(ike_cfg));
 	}
 
 	this->lock->write_lock(this->lock);
@@ -211,12 +249,14 @@ METHOD(trap_manager_t, install, uint32_t,
 		this->lock->unlock(this->lock);
 		other->destroy(other);
 		me->destroy(me);
-		return 0;
+		return FALSE;
 	}
 	enumerator = this->traps->create_enumerator(this->traps);
 	while (enumerator->enumerate(enumerator, &entry))
 	{
-		if (streq(entry->name, child->get_name(child)))
+		if (streq(entry->name, child->get_name(child)) &&
+			streq(entry->peer_cfg->get_name(entry->peer_cfg),
+				  peer->get_name(peer)))
 		{
 			found = entry;
 			if (entry->child_sa)
@@ -236,11 +276,10 @@ METHOD(trap_manager_t, install, uint32_t,
 			this->lock->unlock(this->lock);
 			other->destroy(other);
 			me->destroy(me);
-			return 0;
+			return FALSE;
 		}
 		/* config might have changed so update everything */
 		DBG1(DBG_CFG, "updating already routed CHILD_SA '%s'", found->name);
-		reqid = found->child_sa->get_reqid(found->child_sa);
 	}
 
 	INIT(entry,
@@ -254,14 +293,14 @@ METHOD(trap_manager_t, install, uint32_t,
 	this->lock->unlock(this->lock);
 
 	/* create and route CHILD_SA */
-	child_sa = child_sa_create(me, other, child, reqid, FALSE, 0, 0);
+	child_sa = child_sa_create(me, other, child, 0, FALSE, 0, 0);
 
 	list = linked_list_create_with_items(me, NULL);
-	my_ts = child->get_traffic_selectors(child, TRUE, NULL, list);
+	my_ts = child->get_traffic_selectors(child, TRUE, NULL, list, FALSE);
 	list->destroy_offset(list, offsetof(host_t, destroy));
 
 	list = linked_list_create_with_items(other, NULL);
-	other_ts = child->get_traffic_selectors(child, FALSE, NULL, list);
+	other_ts = child->get_traffic_selectors(child, FALSE, NULL, list, FALSE);
 	list->destroy_offset(list, offsetof(host_t, destroy));
 
 	/* We don't know the finally negotiated protocol (ESP|AH), we install
@@ -286,14 +325,13 @@ METHOD(trap_manager_t, install, uint32_t,
 		this->lock->unlock(this->lock);
 		entry->child_sa = child_sa;
 		destroy_entry(entry);
-		reqid = 0;
 	}
 	else
 	{
-		reqid = child_sa->get_reqid(child_sa);
 		this->lock->write_lock(this->lock);
 		entry->child_sa = child_sa;
 		this->lock->unlock(this->lock);
+		result = TRUE;
 	}
 	if (found)
 	{
@@ -304,11 +342,11 @@ METHOD(trap_manager_t, install, uint32_t,
 	this->installing--;
 	this->condvar->signal(this->condvar);
 	this->lock->unlock(this->lock);
-	return reqid;
+	return result;
 }
 
 METHOD(trap_manager_t, uninstall, bool,
-	private_trap_manager_t *this, uint32_t reqid)
+	private_trap_manager_t *this, char *peer, char *child)
 {
 	enumerator_t *enumerator;
 	entry_t *entry, *found = NULL;
@@ -317,8 +355,8 @@ METHOD(trap_manager_t, uninstall, bool,
 	enumerator = this->traps->create_enumerator(this->traps);
 	while (enumerator->enumerate(enumerator, &entry))
 	{
-		if (entry->child_sa &&
-			entry->child_sa->get_reqid(entry->child_sa) == reqid)
+		if (streq(entry->name, child) &&
+		   (!peer || streq(peer, entry->peer_cfg->get_name(entry->peer_cfg))))
 		{
 			this->traps->remove_at(this->traps, enumerator);
 			found = entry;
@@ -330,7 +368,6 @@ METHOD(trap_manager_t, uninstall, bool,
 
 	if (!found)
 	{
-		DBG1(DBG_CFG, "trap %d not found to uninstall", reqid);
 		return FALSE;
 	}
 	destroy_entry(found);
@@ -372,31 +409,6 @@ METHOD(trap_manager_t, create_enumerator, enumerator_t*,
 	return enumerator_create_filter(this->traps->create_enumerator(this->traps),
 									trap_filter, this->lock,
 									(void*)this->lock->unlock);
-}
-
-METHOD(trap_manager_t, find_reqid, uint32_t,
-	private_trap_manager_t *this, child_cfg_t *child)
-{
-	enumerator_t *enumerator;
-	entry_t *entry;
-	uint32_t reqid = 0;
-
-	this->lock->read_lock(this->lock);
-	enumerator = this->traps->create_enumerator(this->traps);
-	while (enumerator->enumerate(enumerator, &entry))
-	{
-		if (streq(entry->name, child->get_name(child)))
-		{
-			if (entry->child_sa)
-			{
-				reqid = entry->child_sa->get_reqid(entry->child_sa);
-			}
-			break;
-		}
-	}
-	enumerator->destroy(enumerator);
-	this->lock->unlock(this->lock);
-	return reqid;
 }
 
 METHOD(trap_manager_t, acquire, void,
@@ -654,7 +666,6 @@ trap_manager_t *trap_manager_create(void)
 			.install = _install,
 			.uninstall = _uninstall,
 			.create_enumerator = _create_enumerator,
-			.find_reqid = _find_reqid,
 			.acquire = _acquire,
 			.flush = _flush,
 			.destroy = _destroy,

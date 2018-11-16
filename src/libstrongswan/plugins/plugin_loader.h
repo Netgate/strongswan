@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2012-2014 Tobias Brunner
  * Copyright (C) 2007 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -76,7 +76,7 @@ struct plugin_loader_t {
 	 * If \<ns>.load_modular is enabled (where \<ns> is lib->ns) the plugins to
 	 * load are determined via a load option in their respective plugin config
 	 * section e.g. \<ns>.plugins.\<plugin>.load = <priority|bool>.
-	 * The oder is determined by the configured priority.  If two plugins have
+	 * The order is determined by the configured priority.  If two plugins have
 	 * the same priority the order as seen in list is preserved.  Plugins not
 	 * found in list are loaded first, in alphabetical order.
 	 *

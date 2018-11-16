@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2012-2013 Reto Buerki
  * Copyright (C) 2012-2013 Adrian-Ken Rueegsegger
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,6 +14,7 @@
  * for more details.
  */
 
+#include <library.h>
 #include <utils/debug.h>
 #include <tkm/constants.h>
 #include <tkm/client.h>
@@ -58,7 +59,7 @@ METHOD(private_key_t, get_type, key_type_t,
 }
 
 METHOD(private_key_t, sign, bool,
-	private_tkm_private_key_t *this, signature_scheme_t scheme,
+	private_tkm_private_key_t *this, signature_scheme_t scheme, void *params,
 	chunk_t data, chunk_t *signature)
 {
 	signature_type sig;

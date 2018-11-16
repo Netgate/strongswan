@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009-2012 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -348,6 +348,8 @@ thread_t *thread_create(thread_main_t main, void *arg)
 	{
 		DBG1(DBG_LIB, "failed to create thread!");
 		this->mutex->lock(this->mutex);
+		this->terminated = TRUE;
+		this->detached_or_joined = TRUE;
 		thread_destroy(this);
 		return NULL;
 	}

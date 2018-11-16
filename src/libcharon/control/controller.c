@@ -2,7 +2,7 @@
  * Copyright (C) 2011-2015 Tobias Brunner
  * Copyright (C) 2007-2011 Martin Willi
  * Copyright (C) 2011 revosec AG
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -117,10 +117,17 @@ struct interface_listener_t {
 	 */
 	spinlock_t *lock;
 
-	/**
-	 * whether to check limits
-	 */
-	bool limits;
+	union {
+		/**
+		 * whether to check limits during initiation
+		 */
+		bool limits;
+
+		/**
+		 * whether to force termination
+		 */
+		bool force;
+	} options;
 };
 
 
@@ -294,10 +301,7 @@ METHOD(listener_t, ike_state_change_terminate, bool,
 		switch (state)
 		{
 			case IKE_DESTROYING:
-				if (ike_sa->get_state(ike_sa) == IKE_DELETING)
-				{	/* proper termination */
-					this->status = SUCCESS;
-				}
+				this->status = SUCCESS;
 				return listener_done(this);
 			default:
 				break;
@@ -366,7 +370,7 @@ METHOD(listener_t, child_state_change_terminate, bool,
 			case CHILD_DESTROYING:
 				switch (child_sa->get_state(child_sa))
 				{
-					case CHILD_DELETING:
+					case CHILD_DELETED:
 						/* proper delete */
 						this->status = SUCCESS;
 						break;
@@ -426,7 +430,7 @@ METHOD(job_t, initiate_execute, job_requeue_t,
 	}
 	peer_cfg->destroy(peer_cfg);
 
-	if (listener->limits && ike_sa->get_state(ike_sa) == IKE_CREATED)
+	if (listener->options.limits && ike_sa->get_state(ike_sa) == IKE_CREATED)
 	{	/* only check if we are not reusing an IKE_SA */
 		u_int half_open, limit_half_open, limit_job_load;
 
@@ -511,7 +515,7 @@ METHOD(controller_t, initiate, status_t,
 			.child_cfg = child_cfg,
 			.peer_cfg = peer_cfg,
 			.lock = spinlock_create(),
-			.limits = limits,
+			.options.limits = limits,
 		},
 		.public = {
 			.execute = _initiate_execute,
@@ -560,8 +564,8 @@ METHOD(job_t, terminate_ike_execute, job_requeue_t,
 	listener->ike_sa = ike_sa;
 	listener->lock->unlock(listener->lock);
 
-	if (ike_sa->delete(ike_sa) != DESTROY_ME)
-	{	/* delete failed */
+	if (ike_sa->delete(ike_sa, listener->options.force) != DESTROY_ME)
+	{	/* delete queued */
 		listener->status = FAILED;
 		charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
 	}
@@ -578,7 +582,7 @@ METHOD(job_t, terminate_ike_execute, job_requeue_t,
 }
 
 METHOD(controller_t, terminate_ike, status_t,
-	controller_t *this, uint32_t unique_id,
+	controller_t *this, uint32_t unique_id, bool force,
 	controller_cb_t callback, void *param, u_int timeout)
 {
 	interface_job_t *job;
@@ -613,13 +617,24 @@ METHOD(controller_t, terminate_ike, status_t,
 
 	if (callback == NULL)
 	{
+		job->listener.options.force = force;
 		terminate_ike_execute(job);
 	}
 	else
 	{
+		if (!timeout)
+		{
+			job->listener.options.force = force;
+		}
 		if (wait_for_listener(job, timeout))
 		{
 			job->listener.status = OUT_OF_RES;
+
+			if (force)
+			{	/* force termination once timeout is reached */
+				job->listener.options.force = TRUE;
+				terminate_ike_execute(job);
+			}
 		}
 	}
 	status = job->listener.status;
@@ -648,17 +663,6 @@ METHOD(job_t, terminate_child_execute, job_requeue_t,
 	listener->lock->lock(listener->lock);
 	listener->ike_sa = ike_sa;
 	listener->lock->unlock(listener->lock);
-
-	if (child_sa->get_state(child_sa) == CHILD_ROUTED)
-	{
-		DBG1(DBG_IKE, "unable to terminate, established "
-			 "CHILD_SA with ID %d not found", id);
-		charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
-		listener->status = NOT_FOUND;
-		/* release listener */
-		listener_done(listener);
-		return JOB_REQUEUE_NONE;
-	}
 
 	if (ike_sa->delete_child_sa(ike_sa, child_sa->get_protocol(child_sa),
 					child_sa->get_spi(child_sa, TRUE), FALSE) != DESTROY_ME)

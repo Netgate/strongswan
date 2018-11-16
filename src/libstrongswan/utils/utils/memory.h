@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008-2014 Tobias Brunner
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -80,7 +80,7 @@ static inline void *memset_noop(void *s, int c, size_t n)
 /**
  * Same as memcpy, but XORs src into dst instead of copy
  */
-void memxor(uint8_t dest[], uint8_t src[], size_t n);
+void memxor(uint8_t dest[], const uint8_t src[], size_t n);
 
 /**
  * Safely overwrite n bytes of memory at ptr with zero, non-inlining variant.

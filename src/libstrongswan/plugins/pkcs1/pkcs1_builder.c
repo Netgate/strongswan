@@ -57,8 +57,13 @@ static public_key_t *parse_public_key(chunk_t blob)
 				int oid = asn1_parse_algorithmIdentifier(object,
 										parser->get_level(parser)+1, NULL);
 
-				if (oid == OID_RSA_ENCRYPTION || oid == OID_RSAES_OAEP)
+				if (oid == OID_RSA_ENCRYPTION || oid == OID_RSAES_OAEP ||
+					oid == OID_RSASSA_PSS)
 				{
+					/* TODO: we should parse parameters for PSS and pass them
+					 * (and the type), or the complete subjectPublicKeyInfo,
+					 * along so we can treat these as restrictions when
+					 * generating signatures with the associated private key */
 					type = KEY_RSA;
 				}
 				else if (oid == OID_EC_PUBLICKEY)
@@ -266,7 +271,8 @@ end:
  * }
  *
  * While the parameters and publicKey fields are OPTIONAL, RFC 5915 says that
- * parameters MUST be included and publicKey SHOULD be.
+ * parameters MUST be included (an errata clarifies this, so this is only the
+ * case for plain private keys, not encoded in PKCS#8) and publicKey SHOULD be.
  */
 static bool is_ec_private_key(chunk_t blob)
 {
@@ -276,7 +282,8 @@ static bool is_ec_private_key(chunk_t blob)
 		   asn1_parse_integer_uint64(data) == 1 &&
 		   asn1_unwrap(&blob, &data) == ASN1_OCTET_STRING &&
 		   asn1_unwrap(&blob, &data) == ASN1_CONTEXT_C_0 &&
-		   asn1_unwrap(&blob, &data) == ASN1_CONTEXT_C_1;
+		   asn1_unwrap(&data, &data) == ASN1_OID &&
+		   (!blob.len || (asn1_unwrap(&blob, &data) == ASN1_CONTEXT_C_1));
 }
 
 /**

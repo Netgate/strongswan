@@ -1,7 +1,8 @@
 /*
  * Copyright 2016-2018 Rubicon Communications, LLC
  *
- * Copyright (C) 2015 Tobias Brunner, Andreas Steffen
+ * Copyright (C) 2015-2017 Tobias Brunner
+ * Copyright (C) 2015-2018 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2014 Martin Willi
@@ -57,6 +58,32 @@
 #include <asn1/asn1.h>
 #include <credentials/certificates/certificate.h>
 #include <credentials/certificates/x509.h>
+#include <counters_query.h>
+
+ENUM(vici_counter_type_names,
+	COUNTER_INIT_IKE_SA_REKEY, COUNTER_OUT_INFORMATIONAL_RSP,
+	"ike-rekey-init",
+	"ike-rekey-resp",
+	"child-rekey",
+	"invalid",
+	"invalid-spi",
+	"ike-init-in-req",
+	"ike-init-in-resp",
+	"ike-init-out-req",
+	"ike-init-out-resp",
+	"ike-auth-in-req",
+	"ike-auth-in-resp",
+	"ike-auth-out-req",
+	"ike-auth-out-resp",
+	"create-child-in-req",
+	"create-child-in-resp",
+	"create-child-out-req",
+	"create-child-out-resp",
+	"info-in-req",
+	"info-in-resp",
+	"info-out-req",
+	"info-out-resp",
+);
 
 typedef struct private_vici_query_t private_vici_query_t;
 
@@ -74,6 +101,11 @@ struct private_vici_query_t {
 	 * Dispatcher
 	 */
 	vici_dispatcher_t *dispatcher;
+
+	/**
+	 * Query interface for counters
+	 */
+	counters_query_t *counters;
 
 	/**
 	 * Daemon startup timestamp
@@ -387,6 +419,7 @@ static void list_ike(private_vici_query_t *this, vici_builder_t *b,
 			b->add_kv(b, "dh-group", "%N", diffie_hellman_group_names, alg);
 		}
 	}
+	add_condition(b, ike_sa, "ppk", COND_PPK);
 
 	if (ike_sa->get_state(ike_sa) == IKE_ESTABLISHED)
 	{
@@ -540,7 +573,7 @@ static void raise_policy_cfg(private_vici_query_t *this, u_int id, char *ike,
 	list_mode(b, NULL, cfg);
 
 	b->begin_list(b, "local-ts");
-	list = cfg->get_traffic_selectors(cfg, TRUE, NULL, NULL);
+	list = cfg->get_traffic_selectors(cfg, TRUE, NULL, NULL, FALSE);
 	enumerator = list->create_enumerator(list);
 	while (enumerator->enumerate(enumerator, &ts))
 	{
@@ -551,7 +584,7 @@ static void raise_policy_cfg(private_vici_query_t *this, u_int id, char *ike,
 	b->end_list(b /* local-ts */);
 
 	b->begin_list(b, "remote-ts");
-	list = cfg->get_traffic_selectors(cfg, FALSE, NULL, NULL);
+	list = cfg->get_traffic_selectors(cfg, FALSE, NULL, NULL, FALSE);
 	enumerator = list->create_enumerator(list);
 	while (enumerator->enumerate(enumerator, &ts))
 	{
@@ -707,6 +740,18 @@ static void build_auth_cfgs(peer_cfg_t *peer_cfg, bool local, vici_builder_t *b)
 		rules->destroy(rules);
 		b->end_list(b);
 
+		b->begin_list(b, "cert_policy");
+		rules = auth->create_enumerator(auth);
+		while (rules->enumerate(rules, &rule, &v))
+		{
+			if (rule == AUTH_RULE_CERT_POLICY)
+			{
+				b->add_li(b, "%s", v.str);
+			}
+		}
+		rules->destroy(rules);
+		b->end_list(b);
+
 		b->begin_list(b, "certs");
 		rules = auth->create_enumerator(auth);
 		while (rules->enumerate(rules, &rule, &v))
@@ -744,7 +789,8 @@ CALLBACK(list_conns, vici_message_t*,
 	ike_cfg_t *ike_cfg;
 	child_cfg_t *child_cfg;
 	char *ike, *str, *interface;
-	uint32_t manual_prio;
+	uint32_t manual_prio, dpd_delay, dpd_timeout;
+	identification_t *ppk_id;
 	linked_list_t *list;
 	traffic_selector_t *ts;
 	lifetime_cfg_t *lft;
@@ -795,6 +841,28 @@ CALLBACK(list_conns, vici_message_t*,
 		b->add_kv(b, "unique", "%N", unique_policy_names,
 			peer_cfg->get_unique_policy(peer_cfg));
 
+		dpd_delay = peer_cfg->get_dpd(peer_cfg);
+		if (dpd_delay)
+		{
+			b->add_kv(b, "dpd_delay", "%u", dpd_delay);
+		}
+
+		dpd_timeout = peer_cfg->get_dpd_timeout(peer_cfg);
+		if (dpd_timeout)
+		{
+			b->add_kv(b, "dpd_timeout", "%u", dpd_timeout);
+		}
+
+		ppk_id = peer_cfg->get_ppk_id(peer_cfg);
+		if (ppk_id)
+		{
+			b->add_kv(b, "ppk_id", "%Y", ppk_id);
+		}
+		if (peer_cfg->ppk_required(peer_cfg))
+		{
+			b->add_kv(b, "ppk_required", "yes");
+		}
+
 		build_auth_cfgs(peer_cfg, TRUE, b);
 		build_auth_cfgs(peer_cfg, FALSE, b);
 
@@ -813,8 +881,14 @@ CALLBACK(list_conns, vici_message_t*,
 			b->add_kv(b, "rekey_packets", "%"PRIu64, lft->packets.rekey);
 			free(lft);
 
+			b->add_kv(b, "dpd_action", "%N", action_names,
+					  child_cfg->get_dpd_action(child_cfg));
+			b->add_kv(b, "close_action", "%N", action_names,
+					  child_cfg->get_close_action(child_cfg));
+
 			b->begin_list(b, "local-ts");
-			list = child_cfg->get_traffic_selectors(child_cfg, TRUE, NULL, NULL);
+			list = child_cfg->get_traffic_selectors(child_cfg, TRUE, NULL,
+													NULL, FALSE);
 			selectors = list->create_enumerator(list);
 			while (selectors->enumerate(selectors, &ts))
 			{
@@ -825,7 +899,8 @@ CALLBACK(list_conns, vici_message_t*,
 			b->end_list(b /* local-ts */);
 
 			b->begin_list(b, "remote-ts");
-			list = child_cfg->get_traffic_selectors(child_cfg, FALSE, NULL, NULL);
+			list = child_cfg->get_traffic_selectors(child_cfg, FALSE, NULL,
+													NULL, FALSE);
 			selectors = list->create_enumerator(list);
 			while (selectors->enumerate(selectors, &ts))
 			{
@@ -1225,6 +1300,131 @@ CALLBACK(get_algorithms, vici_message_t*,
 	return b->finalize(b);
 }
 
+/**
+ * Make sure we have the counters query interface
+ */
+static inline bool ensure_counters(private_vici_query_t *this)
+{
+	if (this->counters)
+	{
+		return TRUE;
+	}
+	return (this->counters = lib->get(lib, "counters")) != NULL;
+}
+
+/**
+ * Add a single set of counters to the message
+ *
+ * Frees the array of counter values
+ */
+static void add_counters(vici_builder_t *b, char *name, uint64_t *counters)
+{
+	char buf[BUF_LEN];
+	counter_type_t i;
+
+	b->begin_section(b, name ?: "");
+	for (i = 0; i < COUNTER_MAX; i++)
+	{
+		snprintf(buf, sizeof(buf), "%N", vici_counter_type_names, i);
+		b->add_kv(b, buf, "%"PRIu64, counters[i]);
+	}
+	b->end_section(b);
+	free(counters);
+}
+
+CALLBACK(get_counters, vici_message_t*,
+	private_vici_query_t *this, char *name, u_int id, vici_message_t *request)
+{
+	vici_builder_t *b;
+	enumerator_t *enumerator;
+	uint64_t *counters;
+	char *conn, *errmsg = NULL;
+	bool all;
+
+	b = vici_builder_create();
+
+	if (ensure_counters(this))
+	{
+		conn = request->get_str(request, NULL, "name");
+		all = request->get_bool(request, FALSE, "all");
+
+		b->begin_section(b, "counters");
+		if (all)
+		{
+			enumerator = this->counters->get_names(this->counters);
+			while (enumerator->enumerate(enumerator, &conn))
+			{
+				counters = this->counters->get_all(this->counters, conn);
+				if (counters)
+				{
+					add_counters(b, conn, counters);
+				}
+			}
+			enumerator->destroy(enumerator);
+		}
+		else
+		{
+			counters = this->counters->get_all(this->counters, conn);
+			if (counters)
+			{
+				add_counters(b, conn, counters);
+			}
+			else
+			{
+				errmsg = "no counters found for this connection";
+			}
+		}
+		b->end_section(b);
+	}
+	else
+	{
+		errmsg = "no counters available (plugin missing?)";
+	}
+
+	b->add_kv(b, "success", errmsg ? "no" : "yes");
+	if (errmsg)
+	{
+		b->add_kv(b, "errmsg", "%s", errmsg);
+	}
+	return b->finalize(b);
+}
+
+CALLBACK(reset_counters, vici_message_t*,
+	private_vici_query_t *this, char *name, u_int id, vici_message_t *request)
+{
+	vici_builder_t *b;
+	char *conn, *errmsg = NULL;
+	bool all;
+
+	b = vici_builder_create();
+
+	if (ensure_counters(this))
+	{
+		conn = request->get_str(request, NULL, "name");
+		all = request->get_bool(request, FALSE, "all");
+
+		if (all)
+		{
+			this->counters->reset_all(this->counters);
+		}
+		else
+		{
+			this->counters->reset(this->counters, conn);
+		}
+	}
+	else
+	{
+		errmsg = "no counters available (plugin missing?)";
+	}
+
+	b->add_kv(b, "success", errmsg ? "no" : "yes");
+	if (errmsg)
+	{
+		b->add_kv(b, "errmsg", "%s", errmsg);
+	}
+	return b->finalize(b);
+}
+
 CALLBACK(version, vici_message_t*,
 	private_vici_query_t *this, char *name, u_int id, vici_message_t *request)
 {
@@ -1425,6 +1625,8 @@ static void manage_commands(private_vici_query_t *this, bool reg)
 	manage_command(this, "list-conns", list_conns, reg);
 	manage_command(this, "list-certs", list_certs, reg);
 	manage_command(this, "get-algorithms", get_algorithms, reg);
+	manage_command(this, "get-counters", get_counters, reg);
+	manage_command(this, "reset-counters", reset_counters, reg);
 	manage_command(this, "version", version, reg);
 	manage_command(this, "stats", stats, reg);
 }

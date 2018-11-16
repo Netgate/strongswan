@@ -27,6 +27,7 @@
 #include <collections/hashtable.h>
 #include <processing/jobs/callback_job.h>
 
+#include <vppinfra/mem.h>
 #include <vppinfra/vec.h>
 #include <vppinfra/pool.h>
 #include <vppmgmt/vpp_mgmt_api.h>
@@ -652,32 +653,23 @@ get_priority(traffic_selector_t *src_ts, traffic_selector_t *dst_ts,
 }
 
 static void
-print_sa_id(kernel_ipsec_sa_id_t *id)
+print_sa_id(kernel_ipsec_sa_id_t *id, const char *msg)
 {
     char srcaddr[40], dstaddr[40];
+    int af = id->src->get_family(id->src);
 
-    if (!id) {
-        DBG1(DBG_KNL, "NULL kernel_ipsec_sa_id_t *");
-        return;
-    }
+    inet_ntop(af, (void *) (id->src->get_address(id->src)).ptr,
+              srcaddr, sizeof(srcaddr));
+    inet_ntop(af, (void *) (id->dst->get_address(id->dst)).ptr,
+              dstaddr, sizeof(dstaddr));
 
-    if (id->src->get_family(id->src) == AF_INET) {
-        inet_ntop(AF_INET, (void *) (id->src->get_address(id->src)).ptr,
-                  srcaddr, sizeof(srcaddr));
-        inet_ntop(AF_INET, (void *) (id->dst->get_address(id->dst)).ptr,
-                  dstaddr, sizeof(dstaddr));
-    } else {
-        inet_ntop(AF_INET6, (void *) (id->src->get_address(id->src)).ptr,
-                  srcaddr, sizeof(srcaddr));
-        inet_ntop(AF_INET6, (void *) (id->dst->get_address(id->dst)).ptr,
-                  dstaddr, sizeof(dstaddr));
-    }
-
-    DBG1(DBG_KNL, "kernel_ipsec_sa_id_t - src addr %s:%d dst addr %s:%d "
-                    "spi %u proto %u mark val %u mask %x", srcaddr,
-            id->src->get_port(id->src), dstaddr,
-            id->dst->get_port(id->dst), ntohl(id->spi),
-            (uint16_t) id->proto, id->mark.value, id->mark.mask);
+    DBG1(DBG_KNL, "%s - src addr %s:%d dst addr %s:%d "
+                    "spi %u proto %u mark val %u mask %x",
+          (msg) ? msg : __func__,
+          srcaddr, id->src->get_port(id->src),
+          dstaddr, id->dst->get_port(id->dst),
+          ntohl(id->spi), (uint16_t) id->proto,
+          id->mark.value, id->mark.mask);
 }
 
 
@@ -1177,6 +1169,7 @@ add_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
     u32 sa_index;
     sa_data_t sa_data = {{0}};
     sa_data_t *sa_data_p = NULL;
+    vmgmt_if_counters_t counters = {0};
 
     inst_num = id->mark.value - 1;
 
@@ -1195,21 +1188,26 @@ add_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
         vec_validate(this->sa_routed_out_by_inst, inst_num);
         vec_validate(this->sa_routed_in_by_inst, inst_num);
 
+        vmgmt_get_interface_counters(sw_if_index, &counters);
+
+        sa_data.sa_stats.last_used = counters.collection_time;
+
         if (sa_data.sa_conf.outbound) {
-            vmgmt_intf_counters_tx(sw_if_index,
-                                   &sa_data.sa_stats.initial_packets,
-                                   &sa_data.sa_stats.initial_bytes,
-                                   &sa_data.sa_stats.last_used);
+
+            sa_data.sa_stats.initial_packets = counters.tx.packets;
+            sa_data.sa_stats.initial_bytes = counters.tx.bytes;
             sa_list = this->sa_routed_out_by_inst + inst_num;
             sa_list_rev = this->sa_routed_in_by_inst + inst_num;
+
         } else {
-            vmgmt_intf_counters_rx(sw_if_index,
-                                   &sa_data.sa_stats.initial_packets,
-                                   &sa_data.sa_stats.initial_bytes,
-                                   &sa_data.sa_stats.last_used);
+
+            sa_data.sa_stats.initial_packets = counters.rx.packets;
+            sa_data.sa_stats.initial_bytes = counters.rx.bytes;
             sa_list = this->sa_routed_in_by_inst + inst_num;
             sa_list_rev = this->sa_routed_out_by_inst + inst_num;
+
         }
+
         sa_data.sa_stats.packets = sa_data.sa_stats.initial_packets;
         sa_data.sa_stats.bytes = sa_data.sa_stats.initial_bytes;
         memcpy(sa_data_p, &sa_data, sizeof(sa_data));
@@ -1323,7 +1321,7 @@ METHOD(kernel_ipsec_t, add_sa, status_t,
 {
     int ret = 0;
 
-    print_sa_id(id);
+    print_sa_id(id, __func__);
 
     if (kernel_vpp_check_connection(this) < 0) {
         return FAILED;
@@ -1343,28 +1341,157 @@ METHOD(kernel_ipsec_t, add_sa, status_t,
     return SUCCESS;
 }
 
-static int
-query_tunnel_if(uint32_t if_index, uint8_t outbound, uint64_t *bytes,
-                uint64_t *packets, time_t *use_time)
+/* tunnel_if_active_sa - Get active SA for tunnel intf in a given direction
+ * Parameters:
+ *  this        Pointer to kernel_vpp private data
+ *  inst_num    Tunnel instance number
+ *  outbound    != 0 outbound, 0 inbound
+ * Return:
+ *  != 0        Pointer to active SA
+ *  0           NULL if no SAs
+ *
+ *  When SAs are added, they're always added to the end of the list. So
+ *  the last added (& currently active) SA should be at the end of the list
+ *  for that tunnel instance and direction.
+ */
+static sa_data_t *
+tunnel_if_active_sa(private_kernel_vpp_ipsec_t *this, u32 inst_num,
+                    u8 outbound)
 {
-    int ret;
-    time_t last_used_time = 0;
-    struct timespec mono_time = { 0, };
+    u32 **dir_list;
+    u32 *sa_idx_list;
+    u32 sa_idx;
+    sa_data_t *sa_data;
 
-    if (if_index == ~0) {
+    vec_validate_init_empty(this->sa_routed_out_by_inst, inst_num, 0);
+    vec_validate_init_empty(this->sa_routed_in_by_inst, inst_num, 0);
+
+    if (outbound) {
+        dir_list = this->sa_routed_out_by_inst;
+    } else {
+        dir_list = this->sa_routed_in_by_inst;
+    }
+
+    if (vec_len(dir_list) <= inst_num) {
+        DBG1(DBG_KNL, "No %s SA list found for tunnel instance %u",
+             (outbound) ? "outbound" : "inbound", inst_num);
+        return NULL;
+    }
+
+    sa_idx_list = vec_elt(dir_list, inst_num);
+    if (!sa_idx_list || !vec_len(sa_idx_list)) {
+        DBG1(DBG_KNL, "No %s SAs found for tunnel instance %u",
+             (outbound) ? "outbound" : "inbound", inst_num);
+        return NULL;
+    }
+
+    sa_idx = vec_elt(sa_idx_list, vec_len(sa_idx_list) - 1);
+    if (sa_idx > pool_len(this->all_sas)) {
+        DBG1(DBG_KNL, "Invalid %s SA index for tunnel instance %u",
+             (outbound) ? "outbound" : "inbound", inst_num);
+        return NULL;
+    }
+
+    sa_data = pool_elt_at_index(this->all_sas, sa_idx);
+
+    return sa_data;
+}
+
+
+/* tunnel_if_stats_update - query tunnel interface, update stats of active SAs
+ * Parameters:
+ *  this        Pointer to kernel_vpp private data
+ *  inst_num    Tunnel instance number
+ * Return:
+ *  0           Success
+ *  -1          Failed to find tunnel interface
+ *
+ * The strongswan kernel API calls query_sa and query_policy are for an
+ * individual SA or policy. The libvppmgmt call to query interface stats
+ * gives you the stats in both directions. Update stats in both directions
+ * since we're receiving them anyway.
+ */
+static int
+tunnel_if_stats_update(private_kernel_vpp_ipsec_t *this, u32 inst_num)
+{
+    vmgmt_if_counters_t counters = { 0 };
+    vmgmt_combined_counter_t *counter;
+    u32 sw_if_index;
+    sa_data_t *sa;
+
+    if ((sw_if_index = get_routed_sa_sw_if_index(this, inst_num)) == ~0) {
+        DBG1(DBG_KNL, "Unable to find interface for tunnel %u", inst_num); 
         return -1;
     }
 
-    if (outbound) {
-        ret = vmgmt_intf_counters_tx(if_index, packets, bytes, &last_used_time);
-    } else {
-        ret = vmgmt_intf_counters_rx(if_index, packets, bytes, &last_used_time);
+    vmgmt_get_interface_counters(sw_if_index, &counters);
+
+    /* A tunnel intf can have one active SA in each direction. The stats for
+     * the tunnel intf are for the active SA. So update the active one, which
+     * will be at the end of the list
+     */
+
+    /* outbound */
+    sa = tunnel_if_active_sa(this, inst_num, 1);
+    counter = &counters.tx;
+    if (sa) {
+        if (counter->packets != sa->sa_stats.packets) {
+            sa->sa_stats.last_used = counters.collection_time;
+        }
+        sa->sa_stats.bytes = counter->bytes;
+        sa->sa_stats.packets= counter->packets;
+    }
+    
+    /* inbound */
+    sa = tunnel_if_active_sa(this, inst_num, 0);
+    counter = &counters.rx;
+    if (sa) {
+        if (counter->packets != sa->sa_stats.packets) {
+            sa->sa_stats.last_used = counters.collection_time;
+        }
+        sa->sa_stats.bytes = counter->bytes;
+        sa->sa_stats.packets= counter->packets;
+    }
+    
+    return 0;
+}
+
+/* tunnel_if_last_used - convert the last used time to monotonic
+ * Parameters:
+ *  this        Pointer to kernel_vpp private data
+ *  sa          Pointer to SA data
+ *  last_used   Pointer to time_t to update with monotonic timestamp
+ * Return:
+ *  <0          Error
+ *  0           Success
+ *
+ * Strongswan wants the last_used timestamp to be a monotonic value. The
+ * timestamps are stored as seconds since the epoch. Convert it.
+ */
+static int
+tunnel_if_last_used(private_kernel_vpp_ipsec_t *this, sa_data_t *sa,
+                    time_t *last_used)
+{
+    struct timespec mono_time = { 0, };
+    time_t secs_since_ts;
+
+    if (!sa || !last_used) {
+        return -1;
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &mono_time);
-    *use_time = mono_time.tv_sec - (time(NULL) - last_used_time);
+    secs_since_ts = time(NULL) - sa->sa_stats.last_used;
 
-    return ret;
+    clock_gettime(CLOCK_MONOTONIC, &mono_time);
+
+    if (secs_since_ts <= mono_time.tv_sec) {
+        *last_used = mono_time.tv_sec - secs_since_ts;
+    } else {
+        DBG1(DBG_KNL, "Stored timestamp %u appears to be invalid",
+             (unsigned int) sa->sa_stats.last_used);
+        return -1;
+    }
+
+    return 0;
 }
 
 static int
@@ -1374,41 +1501,23 @@ query_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 {
     sa_data_t *sa;
     u32 inst_num;
-    int ret = -1;
+    int ret = 0;
 
     inst_num = id->mark.value - 1;
 
     this->mutex->lock(this->mutex);
 
+    tunnel_if_stats_update(this, inst_num);
+
     if ((sa = find_routed_sa_data(this, id)) != NULL) {
-        u32 sw_if_index;
-        u32 *sa_list;
-        u32 sa_index, last_sa_index;
-        
-        sa_index = sa - this->all_sas;
-
-        if (sa->sa_conf.outbound) {
-            sa_list = vec_elt(this->sa_routed_out_by_inst, inst_num);
-        } else {
-            sa_list = vec_elt(this->sa_routed_in_by_inst, inst_num);
-        }
-
-        last_sa_index = vec_elt(sa_list, vec_len(sa_list) - 1);
-
-        /* Only update stats if this is the most recent ( == active) SA */
-        if (last_sa_index == sa_index) {
-
-            sw_if_index = get_routed_sa_sw_if_index(this, inst_num);
-            ret = query_tunnel_if(sw_if_index,
-                                  sa->sa_conf.outbound,
-                                  &sa->sa_stats.bytes,
-                                  &sa->sa_stats.packets,
-                                  &sa->sa_stats.last_used);
-        }
 
         *bytes = sa->sa_stats.bytes - sa->sa_stats.initial_bytes;
         *packets = sa->sa_stats.packets - sa->sa_stats.initial_packets;
-        *time = sa->sa_stats.last_used;
+        ret = tunnel_if_last_used(this, sa, time);
+        if (ret < 0) {
+            DBG1(DBG_KNL, "Unable to update last used time for tunnel %u",
+                 inst_num);
+        }
     }
 
     this->mutex->unlock(this->mutex);
@@ -1536,7 +1645,7 @@ del_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 
             /* clear the counters if there are no SAs in the other direction */
             if (vec_len(*sa_list_rev) == 0) {
-                vmgmt_intf_counters_clear(sw_if_index);
+                vmgmt_intf_clear_counters(sw_if_index);
             }
         }
 
@@ -1582,6 +1691,8 @@ METHOD(kernel_ipsec_t, del_sa, status_t,
         kernel_ipsec_del_sa_t *data)
 {
     int ret;
+
+    print_sa_id(id, __func__);
 
     if (kernel_vpp_check_connection(this) < 0) {
         return FAILED;
@@ -1687,8 +1798,9 @@ query_routed_policy(private_kernel_vpp_ipsec_t *this,
                     kernel_ipsec_query_policy_t *data, time_t *use_time)
 {
     int ret = -1;
-    u32 inst_num, sw_if_index;
+    u32 inst_num;
     int outbound = 0;
+    sa_data_t *sa;
 
     inst_num = id->mark.value - 1;
 
@@ -1698,8 +1810,16 @@ query_routed_policy(private_kernel_vpp_ipsec_t *this,
 
     this->mutex->lock(this->mutex);
 
-    if ((sw_if_index = get_routed_sa_sw_if_index(this, inst_num)) != ~0) {
-        ret = query_tunnel_if(sw_if_index, outbound, NULL, NULL, use_time);
+    tunnel_if_stats_update(this, inst_num);
+
+    if ((sa = tunnel_if_active_sa(this, inst_num, outbound)) != NULL) {
+
+        ret = tunnel_if_last_used(this, sa, use_time);
+        if (ret < 0) {
+            DBG1(DBG_KNL, "Unable to update last used time for tunnel %u",
+                 inst_num);
+        }
+
     }
 
     this->mutex->unlock(this->mutex);
@@ -1832,7 +1952,6 @@ METHOD(kernel_ipsec_t, destroy, void,
     policy_entry_t *policy;
     sa_entry_t *sa;
     u32 **sa_list;
-    
 
     enumerator = this->policies->create_enumerator(this->policies);
     while (enumerator->enumerate(enumerator, &policy, &policy)) {
@@ -1902,6 +2021,8 @@ kernel_vpp_ipsec_t *kernel_vpp_ipsec_create()
             .sa_routed_in_by_inst = NULL,
             .sa_routed_out_by_inst = NULL,
     );
+
+    clib_mem_init(NULL, 64 << 20);
 
     if (vmgmt_init("iked_ipsec", 0) < 0) {
         DBG1(DBG_KNL, "Connection to VPP API failed");

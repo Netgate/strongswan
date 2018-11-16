@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -83,7 +83,7 @@ struct signer_test_vector_t {
 	size_t len;
 	/** input data */
 	u_char *data;
-	/** expected output, with ouput size of the tested algorithm */
+	/** expected output, with output size of the tested algorithm */
 	u_char *mac;
 };
 

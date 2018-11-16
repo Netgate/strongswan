@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -34,7 +34,7 @@
 /**
  * Maximum number of usage summary lines (+1)
  */
-#define MAX_LINES 11
+#define MAX_LINES 12
 
 typedef struct command_t command_t;
 typedef struct command_option_t command_option_t;

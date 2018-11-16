@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005-2009 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -25,7 +25,8 @@
 typedef enum integrity_algorithm_t integrity_algorithm_t;
 typedef struct signer_t signer_t;
 
-#include <library.h>
+#include <utils/utils.h>
+#include <utils/chunk.h>
 
 /**
  * Integrity algorithm, as in IKEv2 RFC 3.3.2.

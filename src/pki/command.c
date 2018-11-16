@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -191,7 +191,7 @@ void command_register(command_t command)
 int command_usage(char *error)
 {
 	FILE *out = stdout;
-	int i;
+	int i, indent = 0;
 
 	if (error)
 	{
@@ -221,12 +221,12 @@ int command_usage(char *error)
 		{
 			if (i == 0)
 			{
-				fprintf(out, "  pki --%s %s\n",
-						cmds[active].cmd, cmds[active].line[i]);
+				indent = fprintf(out, "  pki --%s ", cmds[active].cmd);
+				fprintf(out, "%s\n", cmds[active].line[i]);
 			}
 			else
 			{
-				fprintf(out, "              %s\n", cmds[active].line[i]);
+				fprintf(out, "%*s%s\n", indent, "", cmds[active].line[i]);
 			}
 		}
 		for (i = 0; cmds[active].options[i].name; i++)

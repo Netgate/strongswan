@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,7 +26,7 @@ typedef struct rekey_child_sa_job_t rekey_child_sa_job_t;
 #include <library.h>
 #include <sa/ike_sa_id.h>
 #include <processing/jobs/job.h>
-#include <config/proposal.h>
+#include <crypto/proposal/proposal.h>
 
 /**
  * Class representing an REKEY_CHILD_SA Job.
@@ -50,4 +50,5 @@ struct rekey_child_sa_job_t {
  */
 rekey_child_sa_job_t *rekey_child_sa_job_create(protocol_id_t protocol,
 												uint32_t spi, host_t *dst);
+
 #endif /** REKEY_CHILD_SA_JOB_H_ @}*/

@@ -2,7 +2,7 @@
  * Copyright (C) 2011 Tobias Brunner
  * Copyright (C) 2005-2009 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -86,7 +86,7 @@ struct private_generator_t {
 	uint8_t current_bit;
 
 	/**
-	 * Associated data struct to read informations from.
+	 * Associated data struct to read information from.
 	 */
 	void *data_struct;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2014 Andreas Steffen
+ * Copyright (C) 2012-2017 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -121,9 +121,9 @@ struct private_imv_os_state_t {
 	int count;
 
 	/**
-	 * Number of not updated packages
+	 * Number of vulnerable packages
 	 */
-	int count_update;
+	int count_security;
 
 	/**
 	 * Number of blacklisted packages
@@ -362,17 +362,21 @@ METHOD(imv_state_t, update_recommendation, void,
 	this->eval = tncif_policy_update_evaluation(this->eval, eval);
 }
 
-METHOD(imv_state_t, change_state, void,
+METHOD(imv_state_t, change_state, TNC_ConnectionState,
 	private_imv_os_state_t *this, TNC_ConnectionState new_state)
 {
+	TNC_ConnectionState old_state;
+
+	old_state = this->state;
 	this->state = new_state;
+	return old_state;
 }
 
 METHOD(imv_state_t, get_reason_string, bool,
 	private_imv_os_state_t *this, enumerator_t *language_enumerator,
 	chunk_t *reason_string, char **reason_language)
 {
-	if (!this->count_update && !this->count_blacklist & !this->os_settings)
+	if (!this->count_security && !this->count_blacklist & !this->os_settings)
 	{
 		return FALSE;
 	}
@@ -383,7 +387,7 @@ METHOD(imv_state_t, get_reason_string, bool,
 	DESTROY_IF(this->reason_string);
 	this->reason_string = imv_reason_string_create(*reason_language, "\n");
 
-	if (this->count_update || this->count_blacklist)
+	if (this->count_security || this->count_blacklist)
 	{
 		this->reason_string->add_reason(this->reason_string, reason_packages);
 	}
@@ -403,7 +407,7 @@ METHOD(imv_state_t, get_remediation_instructions, bool,
 	imv_os_info_t *os_info;
 	bool as_xml = FALSE;
 
-	if (!this->count_update && !this->count_blacklist & !this->os_settings)
+	if (!this->count_security && !this->count_blacklist & !this->os_settings)
 	{
 		return FALSE;
 	}
@@ -430,7 +434,7 @@ METHOD(imv_state_t, get_remediation_instructions, bool,
 	}
 
 	/* List of packages in need of an update, if any */
-	if (this->count_update)
+	if (this->count_security)
 	{
 		this->remediation_string->add_instruction(this->remediation_string,
 							instr_update_packages_title,
@@ -466,6 +470,32 @@ METHOD(imv_state_t, get_remediation_instructions, bool,
 	return TRUE;
 }
 
+METHOD(imv_state_t, reset, void,
+	private_imv_os_state_t *this)
+{
+	DESTROY_IF(this->reason_string);
+	DESTROY_IF(this->remediation_string);
+	this->reason_string = NULL;
+	this->remediation_string = NULL;
+	this->rec  = TNC_IMV_ACTION_RECOMMENDATION_NO_RECOMMENDATION;
+	this->eval = TNC_IMV_EVALUATION_RESULT_DONT_KNOW;
+
+	this->action_flags = 0;
+
+	this->handshake_state = IMV_OS_STATE_INIT;
+	this->count = 0;
+	this->count_security = 0;
+	this->count_blacklist = 0;
+	this->count_ok = 0;
+	this->os_settings = 0;
+	this->missing = 0;
+
+	this->update_packages->destroy_function(this->update_packages, free);
+	this->remove_packages->destroy_function(this->remove_packages, free);
+	this->update_packages = linked_list_create();
+	this->remove_packages = linked_list_create();
+}
+
 METHOD(imv_state_t, destroy, void,
 	private_imv_os_state_t *this)
 {
@@ -492,26 +522,26 @@ METHOD(imv_os_state_t, get_handshake_state, imv_os_handshake_state_t,
 
 
 METHOD(imv_os_state_t, set_count, void,
-	private_imv_os_state_t *this, int count, int count_update,
+	private_imv_os_state_t *this, int count, int count_security,
 	int count_blacklist, int count_ok)
 {
 	this->count           += count;
-	this->count_update    += count_update;
+	this->count_security  += count_security;
 	this->count_blacklist += count_blacklist;
 	this->count_ok        += count_ok;
 }
 
 METHOD(imv_os_state_t, get_count, void,
-	private_imv_os_state_t *this, int *count, int *count_update,
+	private_imv_os_state_t *this, int *count, int *count_security,
 	int *count_blacklist, int *count_ok)
 {
 	if (count)
 	{
 		*count = this->count;
 	}
-	if (count_update)
+	if (count_security)
 	{
-		*count_update = this->count_update;
+		*count_security = this->count_security;
 	}
 	if (count_blacklist)
 	{
@@ -590,6 +620,7 @@ imv_state_t *imv_os_state_create(TNC_ConnectionID connection_id)
 				.update_recommendation = _update_recommendation,
 				.get_reason_string = _get_reason_string,
 				.get_remediation_instructions = _get_remediation_instructions,
+				.reset = _reset,
 				.destroy = _destroy,
 			},
 			.set_handshake_state = _set_handshake_state,

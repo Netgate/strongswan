@@ -22,7 +22,7 @@
         name="primary">#A2042C</color>
 
     <color
-        name="primary_dark">#000000</color>
+        name="primary_dark">#323232</color>
 
     <color
         name="error_text">#D9192C</color>
@@ -38,6 +38,9 @@
 
     <color
         name="panel_separator">#5a5a5a</color>
+
+    <color
+        name="checked">#4a4a4a</color>
 
     <color
         name="pressed">#5a5a5a</color>

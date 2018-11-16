@@ -41,14 +41,13 @@ static void add_list_key(vici_req_t *req, char *key, char *value)
 }
 
 /**
- * Translate setting key/values from a section into vici key-values/lists
+ * Translate setting key/values from a section enumerator into vici
+ * key-values/lists. Destroys the enumerator.
  */
-static void add_key_values(vici_req_t *req, settings_t *cfg, char *section)
+static void add_key_values(vici_req_t *req, enumerator_t *enumerator)
 {
-	enumerator_t *enumerator;
 	char *key, *value;
 
-	enumerator = cfg->create_key_value_enumerator(cfg, section);
 	while (enumerator->enumerate(enumerator, &key, &value))
 	{
 		/* pool subnet is encoded as key/value, all other attributes as list */
@@ -70,17 +69,16 @@ static void add_key_values(vici_req_t *req, settings_t *cfg, char *section)
 static bool load_pool(vici_conn_t *conn, settings_t *cfg,
 					  char *section, command_format_options_t format)
 {
+	enumerator_t *enumerator;
 	vici_req_t *req;
 	vici_res_t *res;
 	bool ret = TRUE;
-	char buf[128];
-
-	snprintf(buf, sizeof(buf), "%s.%s", "pools", section);
 
 	req = vici_begin("load-pool");
 
 	vici_begin_section(req, section);
-	add_key_values(req, cfg, buf);
+	enumerator = cfg->create_key_value_enumerator(cfg, "pools.%s", section);
+	add_key_values(req, enumerator);
 	vici_end_section(req);
 
 	res = vici_submit(req, conn);
@@ -253,7 +251,7 @@ static int load_pools(vici_conn_t *conn)
 {
 	command_format_options_t format = COMMAND_FORMAT_NONE;
 	settings_t *cfg;
-	char *arg;
+	char *arg, *file = SWANCTL_CONF;
 	int ret;
 
 	while (TRUE)
@@ -268,6 +266,9 @@ static int load_pools(vici_conn_t *conn)
 			case 'r':
 				format |= COMMAND_FORMAT_RAW;
 				continue;
+			case 'f':
+				file = arg;
+				continue;
 			case EOF:
 				break;
 			default:
@@ -276,10 +277,10 @@ static int load_pools(vici_conn_t *conn)
 		break;
 	}
 
-	cfg = settings_create(SWANCTL_CONF);
+	cfg = settings_create(file);
 	if (!cfg)
 	{
-		fprintf(stderr, "parsing '%s' failed\n", SWANCTL_CONF);
+		fprintf(stderr, "parsing '%s' failed\n", file);
 		return EINVAL;
 	}
 
@@ -302,6 +303,7 @@ static void __attribute__ ((constructor))reg()
 			{"help",		'h', 0, "show usage information"},
 			{"raw",			'r', 0, "dump raw response message"},
 			{"pretty",		'P', 0, "dump raw response message in pretty print"},
+			{"file",		'f', 1, "custom path to swanctl.conf"},
 		}
 	});
 }

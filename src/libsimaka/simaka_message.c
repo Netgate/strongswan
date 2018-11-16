@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -49,7 +49,7 @@ struct hdr_t {
 struct attr_hdr_t {
 	/** attribute type */
 	uint8_t type;
-	/** attibute length */
+	/** attribute length */
 	uint8_t length;
 } __attribute__((__packed__));
 

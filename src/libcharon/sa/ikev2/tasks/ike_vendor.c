@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -59,7 +59,7 @@ struct private_ike_vendor_t {
 	ike_sa_t *ike_sa;
 
 	/**
-	 * Are we the inititator of this task
+	 * Are we the initiator of this task
 	 */
 	bool initiator;
 };
@@ -97,6 +97,8 @@ static vid_data_t vids[] = {
 	  "\x88\x2f\xe5\x6d\x6f\xd2\x0d\xbc\x22\x51\x61\x3b\x2e\xbe\x5b\xeb"},
 	{ "Cisco Delete Reason", 0, NULL, 0,
 	  "CISCO-DELETE-REASON" },
+	{ "Cisco FlexVPN Supported", 0, NULL, 0,
+	  "FLEXVPN-SUPPORTED" },
 	{ "Cisco Copyright (c) 2009", 0, NULL, 0,
 	  "CISCO(COPYRIGHT)&Copyright (c) 2009 Cisco Systems, Inc." },
 	{ "FRAGMENTATION", 0, NULL, 16,

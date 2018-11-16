@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011-2016 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2010 Martin Willi
  * Copyright (C) 2010 revosec AG
@@ -243,7 +243,7 @@ static bool reauth(private_pkcs11_private_key_t *this,
 }
 
 METHOD(private_key_t, sign, bool,
-	private_pkcs11_private_key_t *this, signature_scheme_t scheme,
+	private_pkcs11_private_key_t *this, signature_scheme_t scheme, void *params,
 	chunk_t data, chunk_t *signature)
 {
 	CK_MECHANISM_PTR mechanism;

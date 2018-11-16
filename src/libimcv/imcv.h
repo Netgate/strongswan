@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2011 Andreas Steffen, HSR Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2011 Andreas Steffen
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -34,6 +35,9 @@
  * @ingroup libimcv
  *
  * @defgroup libimcv_swid swid
+ * @ingroup libimcv
+ *
+ * @defgroup libimcv_swima swima
  * @ingroup libimcv
  *
  * @addtogroup libimcv

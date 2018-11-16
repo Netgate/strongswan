@@ -2,7 +2,6 @@ AUTOMAKE_OPTIONS = foreign
 
 SUBDIRS = properties auth-dialog po
 
-nmvpnservicedir = $(prefix)/lib/NetworkManager/VPN
 nmvpnservice_DATA = nm-strongswan-service.name
 
 @INTLTOOL_DESKTOP_RULE@
@@ -12,6 +11,7 @@ appdata_DATA = $(appdata_in_files:.xml.in=.xml)
 appdata_in_files = NetworkManager-strongswan.appdata.xml.in
 @INTLTOOL_XML_RULE@
 
+if WITH_LIBNM_GLIB
 # Install a file with full path to plugins for an old gnome-shell
 # https://bugzilla.gnome.org/show_bug.cgi?id=693590
 install-data-hook:
@@ -26,6 +26,7 @@ install-data-hook:
 
 uninstall-hook:
 	 rm -f $(DESTDIR)$(sysconfdir)/NetworkManager/VPN/nm-strongswan-service.name
+endif
 
 nm-strongswan-service.name: $(srcdir)/nm-strongswan-service.name.in
 	$(AM_V_GEN) \

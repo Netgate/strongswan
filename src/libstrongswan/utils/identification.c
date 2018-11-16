@@ -72,10 +72,13 @@ static const x501rdn_t x501rdns[] = {
 	{"C", 					OID_COUNTRY,				ASN1_PRINTABLESTRING},
 	{"L", 					OID_LOCALITY,				ASN1_PRINTABLESTRING},
 	{"ST",					OID_STATE_OR_PROVINCE,		ASN1_PRINTABLESTRING},
+	{"STREET",				OID_STREET_ADDRESS,			ASN1_PRINTABLESTRING},
 	{"O", 					OID_ORGANIZATION,			ASN1_PRINTABLESTRING},
 	{"OU", 					OID_ORGANIZATION_UNIT,		ASN1_PRINTABLESTRING},
 	{"T", 					OID_TITLE,					ASN1_PRINTABLESTRING},
 	{"D", 					OID_DESCRIPTION,			ASN1_PRINTABLESTRING},
+	{"postalAddress",		OID_POSTAL_ADDRESS,			ASN1_PRINTABLESTRING},
+	{"postalCode",			OID_POSTAL_CODE,			ASN1_PRINTABLESTRING},
 	{"N", 					OID_NAME,					ASN1_PRINTABLESTRING},
 	{"G", 					OID_GIVEN_NAME,				ASN1_PRINTABLESTRING},
 	{"I", 					OID_INITIALS,				ASN1_PRINTABLESTRING},
@@ -1219,6 +1222,7 @@ static private_identification_t* create_from_string_with_prefix_type(char *str)
 		{ "dns:",			ID_FQDN					},
 		{ "asn1dn:",		ID_DER_ASN1_DN			},
 		{ "asn1gn:",		ID_DER_ASN1_GN			},
+		{ "xmppaddr:",		ID_DER_ASN1_GN          },
 		{ "keyid:",			ID_KEY_ID				},
 	};
 	private_identification_t *this;
@@ -1230,6 +1234,7 @@ static private_identification_t* create_from_string_with_prefix_type(char *str)
 		{
 			this = identification_create(prefixes[i].type);
 			str += strlen(prefixes[i].str);
+
 			if (*str == '#')
 			{
 				this->encoded = chunk_from_hex(chunk_from_str(str + 1), NULL);
@@ -1238,6 +1243,17 @@ static private_identification_t* create_from_string_with_prefix_type(char *str)
 			{
 				this->encoded = chunk_clone(chunk_from_str(str));
 			}
+
+			if (prefixes[i].type == ID_DER_ASN1_GN &&
+				strcasepfx(prefixes[i].str, "xmppaddr:"))
+			{
+				this->encoded = asn1_wrap(ASN1_CONTEXT_C_0, "mm",
+									asn1_build_known_oid(OID_XMPP_ADDR),
+									asn1_wrap(ASN1_CONTEXT_C_0, "m",
+										asn1_wrap(ASN1_UTF8STRING, "m",
+											this->encoded)));
+			}
+
 			return this;
 		}
 	}

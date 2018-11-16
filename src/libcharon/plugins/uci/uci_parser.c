@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008 Martin Willi
  * Copyright (C) 2008 Thomas Kallenberg
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -112,7 +112,7 @@ METHOD(uci_parser_t, create_section_enumerator, enumerator_t*,
 	va_list args;
 	int i;
 
-	/* allocate enumerator large enought to hold keyword pointers */
+	/* allocate enumerator large enough to hold keyword pointers */
 	i = 1;
 	va_start(args, this);
 	while (va_arg(args, char*))

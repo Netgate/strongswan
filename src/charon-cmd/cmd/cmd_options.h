@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2013 Martin Willi
  * Copyright (C) 2013 revosec AG
@@ -63,7 +63,7 @@ struct cmd_option_t {
 	const char *name;
 	/** takes argument */
 	int has_arg;
-	/** decription of argument */
+	/** description of argument */
 	const char *arg;
 	/** short description to option */
 	const char *desc;

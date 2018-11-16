@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009-2016 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -864,6 +864,11 @@ static void process_link(private_kernel_pfroute_net_t *this,
 			.flags = msg->ifm_flags,
 			.addrs = linked_list_create(),
 		);
+#ifdef __APPLE__
+		/* Similar to the issue described above, on 10.13 we need this delay as
+		 * we might otherwise not be able to convert the index to a name yet. */
+		usleep(50000);
+#endif
 		if (if_indextoname(iface->ifindex, iface->ifname))
 		{
 			DBG1(DBG_KNL, "interface %s appeared", iface->ifname);
@@ -1831,7 +1836,7 @@ METHOD(enumerator_t, enumerate_subnets, bool,
 	for (; this->current < this->buf + this->len;
 		 this->current += rtm->rtm_msglen)
 	{
-		struct sockaddr *netmask;
+		struct sockaddr *netmask = NULL;
 		uint8_t netbits = 0;
 
 		rtm = (struct rt_msghdr*)this->current;
@@ -1864,7 +1869,7 @@ METHOD(enumerator_t, enumerate_subnets, bool,
 				this->ifname = strndup(sdl->sdl_data, sdl->sdl_nlen);
 			}
 		}
-		if (this->net)
+		if (this->net && netmask)
 		{
 			netbits = sockaddr_to_netmask(netmask, this->net);
 		}

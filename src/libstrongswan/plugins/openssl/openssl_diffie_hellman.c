@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008-2010 Tobias Brunner
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -193,7 +193,7 @@ METHOD(diffie_hellman_t, destroy, void,
  * Described in header.
  */
 openssl_diffie_hellman_t *openssl_diffie_hellman_create(
-							diffie_hellman_group_t group, chunk_t g, chunk_t p)
+											diffie_hellman_group_t group, ...)
 {
 	private_openssl_diffie_hellman_t *this;
 	const BIGNUM *privkey;
@@ -225,6 +225,9 @@ openssl_diffie_hellman_t *openssl_diffie_hellman_create(
 
 	if (group == MODP_CUSTOM)
 	{
+		chunk_t g, p;
+
+		VA_ARGS_GET(group, g, p);
 		if (!DH_set0_pqg(this->dh, BN_bin2bn(p.ptr, p.len, NULL), NULL,
 						 BN_bin2bn(g.ptr, g.len, NULL)))
 		{

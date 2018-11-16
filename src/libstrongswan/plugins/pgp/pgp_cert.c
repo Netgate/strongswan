@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -114,7 +114,7 @@ METHOD(certificate_t, has_issuer, id_match_t,
 }
 
 METHOD(certificate_t, issued_by,bool,
-	private_pgp_cert_t *this, certificate_t *issuer, signature_scheme_t *scheme)
+	private_pgp_cert_t *this, certificate_t *issuer, signature_params_t **scheme)
 {
 	/* TODO: check signature blobs for a valid signature */
 	return FALSE;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2014 Andreas Steffen
+ * Copyright (C) 2011-2018 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -21,11 +21,16 @@
 #include <utils/debug.h>
 
 ENUM(pa_tnc_error_code_names, PA_ERROR_RESERVED,
-							  PA_ERROR_ATTR_TYPE_NOT_SUPPORTED,
+							  PA_ERROR_SWIMA_SUBSCRIPTION_ID_REUSE,
 	"Reserved",
 	"Invalid Parameter",
 	"Version Not Supported",
-	"Attribute Type Not Supported"
+	"Attribute Type Not Supported",
+	"SWIMA Error",
+	"SWIMA Subscription Denied",
+	"SWIMA Response Too Large",
+	"SWIMA Subscription Fulfillment Error",
+	"SWIMA Subscription ID Reuse"
 );
 
 typedef struct private_ietf_attr_pa_tnc_error_t private_ietf_attr_pa_tnc_error_t;
@@ -246,7 +251,8 @@ METHOD(pa_tnc_attr_t, process, status_t,
 	reader->read_uint24(reader, &this->error_code.vendor_id);
 	reader->read_uint32(reader, &this->error_code.type);
 
-	if (this->error_code.vendor_id == PEN_IETF)
+	if (this->error_code.vendor_id == PEN_IETF &&
+		this->error_code.type <= PA_ERROR_PA_TNC_MSG_ROOF)
 	{
 		if (!reader->read_data(reader, PA_ERROR_MSG_INFO_SIZE, &this->msg_info))
 		{
@@ -396,7 +402,8 @@ pa_tnc_attr_t *ietf_attr_pa_tnc_error_create(pen_type_t error_code,
 {
 	private_ietf_attr_pa_tnc_error_t *this;
 
-	if (error_code.vendor_id == PEN_IETF)
+	if (error_code.vendor_id == PEN_IETF &&
+		error_code.type <= PA_ERROR_PA_TNC_MSG_ROOF)
 	{
 		msg_info.len = PA_ERROR_MSG_INFO_SIZE;
 	}

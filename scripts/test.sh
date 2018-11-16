@@ -1,6 +1,33 @@
 #!/bin/sh
 # Build script for Travis CI
 
+build_botan()
+{
+	# same revision used in the build recipe of the testing environment
+	BOTAN_REV=1872f899716854927ecc68022fac318735be8824
+	BOTAN_DIR=$TRAVIS_BUILD_DIR/../botan
+
+	# if the leak detective is enabled we have to disable threading support
+	# (used for std::async) as that causes invalid frees somehow, the
+	# locking allocator causes a static leak via the first function that
+	# references it (e.g. crypter or hasher), so we disable that too
+	if test "$LEAK_DETECTIVE" = "yes"; then
+		BOTAN_CONFIG="--without-os-features=threads
+					  --disable-modules=locking_allocator"
+	fi
+	# disable some larger modules we don't need for the tests
+	BOTAN_CONFIG="$BOTAN_CONFIG --disable-modules=pkcs11,tls,x509,xmss"
+
+	git clone https://github.com/randombit/botan.git $BOTAN_DIR &&
+	cd $BOTAN_DIR &&
+	git checkout -qf $BOTAN_REV &&
+	python ./configure.py --amalgamation $BOTAN_CONFIG &&
+	make -j4 libs >/dev/null &&
+	sudo make install >/dev/null &&
+	sudo ldconfig || exit $?
+	cd -
+}
+
 if test -z $TRAVIS_BUILD_DIR; then
 	TRAVIS_BUILD_DIR=$PWD
 fi
@@ -26,12 +53,23 @@ gcrypt)
 	CONFIG="--disable-defaults --enable-pki --enable-gcrypt --enable-pkcs1"
 	DEPS="libgcrypt11-dev"
 	;;
+botan)
+	CONFIG="--disable-defaults --enable-pki --enable-botan"
+	# we can't use the old package that comes with Ubuntu so we build from
+	# the current master until 2.8.0 is released and then probably switch to
+	# that unless we need newer features (at least 2.7.0 plus PKCS#1 patch is
+	# currently required)
+	DEPS=""
+	if test "$1" = "deps"; then
+		build_botan
+	fi
+	;;
 printf-builtin)
 	CONFIG="--with-printf-hooks=builtin"
 	;;
-all|coverage)
+all|coverage|sonarcloud)
 	CONFIG="--enable-all --disable-android-dns --disable-android-log
-			--disable-dumm --disable-kernel-pfroute --disable-keychain
+			--disable-kernel-pfroute --disable-keychain
 			--disable-lock-profiler --disable-padlock --disable-fuzzing
 			--disable-osx-attr --disable-tkm --disable-uci
 			--disable-systemd --disable-soup --disable-unwind-backtraces
@@ -39,6 +77,8 @@ all|coverage)
 			--disable-kernel-wfp --disable-kernel-iph --disable-winhttp"
 	# Ubuntu 14.04 does provide a too old libtss2-dev
 	CONFIG="$CONFIG --disable-tss-tss2"
+	# Ubuntu 14.04 does not provide libnm
+	CONFIG="$CONFIG --disable-nm"
 	# not enabled on the build server
 	CONFIG="$CONFIG --disable-af-alg"
 	if test "$TEST" != "coverage"; then
@@ -49,10 +89,12 @@ all|coverage)
 	fi
 	DEPS="$DEPS libcurl4-gnutls-dev libsoup2.4-dev libunbound-dev libldns-dev
 		  libmysqlclient-dev libsqlite3-dev clearsilver-dev libfcgi-dev
-		  libnm-glib-dev libnm-glib-vpn-dev libpcsclite-dev libpam0g-dev
-		  binutils-dev libunwind8-dev libjson0-dev iptables-dev python-pip
-		  libtspi-dev"
+		  libpcsclite-dev libpam0g-dev binutils-dev libunwind8-dev
+		  libjson0-dev iptables-dev python-pip libtspi-dev"
 	PYDEPS="pytest"
+	if test "$1" = "deps"; then
+		build_botan
+	fi
 	;;
 win*)
 	CONFIG="--disable-defaults --enable-svc --enable-ikev2
@@ -64,8 +106,15 @@ win*)
 			--enable-tnccs-20 --enable-imc-attestation --enable-imv-attestation
 			--enable-imc-os --enable-imv-os --enable-tnc-imv --enable-tnc-imc
 			--enable-pki --enable-swanctl --enable-socket-win"
-	# no make check for Windows binaries
-	TARGET=
+	# no make check for Windows binaries unless we run on a windows host
+	if test "$APPVEYOR" != "True"; then
+		TARGET=
+	else
+		CONFIG="$CONFIG --enable-openssl"
+		CFLAGS="$CFLAGS -I/c/OpenSSL-$TEST/include"
+		LDFLAGS="-L/c/OpenSSL-$TEST"
+		export LDFLAGS
+	fi
 	CFLAGS="$CFLAGS -mno-ms-bitfields"
 	DEPS="gcc-mingw-w64-base"
 	case "$TEST" in
@@ -76,7 +125,7 @@ win*)
 		DEPS="gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 mingw-w64-x86-64-dev $DEPS"
 		CC="x86_64-w64-mingw32-gcc"
 		# apply patch to MinGW headers
-		if test -z "$1"; then
+		if test "$APPVEYOR" != "True" -a -z "$1"; then
 			sudo patch -f -p 4 -d /usr/share/mingw-w64/include < src/libcharon/plugins/kernel_wfp/mingw-w64-4.8.1.diff
 		fi
 		;;
@@ -89,6 +138,8 @@ win*)
 	esac
 	;;
 osx)
+	# this causes a false positive in ip-packet.c since Xcode 8.3
+	CFLAGS="$CFLAGS -Wno-address-of-packed-member"
 	# use the same options as in the Homebrew Formula
 	CONFIG="--disable-defaults --enable-charon --enable-cmd --enable-constraints
 			--enable-curl --enable-eap-gtc --enable-eap-identity
@@ -113,6 +164,28 @@ osx)
 	export PKG_CONFIG_PATH
 	export CPPFLAGS
 	export LDFLAGS
+	;;
+fuzzing)
+	CFLAGS="$CFLAGS -DNO_CHECK_MEMWIPE"
+	CONFIG="--enable-fuzzing --enable-static --disable-shared --disable-scripts
+			--enable-imc-test --enable-tnccs-20"
+	# don't run any of the unit tests
+	export TESTS_RUNNERS=
+	# prepare corpora
+	if test -z "$1"; then
+		if test -z "$FUZZING_CORPORA"; then
+			git clone --depth 1 https://github.com/strongswan/fuzzing-corpora.git fuzzing-corpora
+			export FUZZING_CORPORA=$TRAVIS_BUILD_DIR/fuzzing-corpora
+		fi
+		# these are about the same as those on OSS-Fuzz (except for the
+		# symbolize options and strip_path_prefix)
+		export ASAN_OPTIONS=redzone=16:handle_sigill=1:strict_string_check=1:\
+			allocator_release_to_os_interval_ms=500:strict_memcmp=1:detect_container_overflow=1:\
+			coverage=0:allocator_may_return_null=1:use_sigaltstack=1:detect_stack_use_after_return=1:\
+			alloc_dealloc_mismatch=0:detect_leaks=1:print_scariness=1:max_uar_stack_size_log=16:\
+			handle_abort=1:check_malloc_usable_size=0:quarantine_size_mb=10:detect_odr_violation=0:\
+			symbolize=1:handle_segv=1:fast_unwind_on_fatal=0:external_symbolizer_path=/usr/bin/llvm-symbolizer-3.5
+	fi
 	;;
 dist)
 	TARGET=distcheck
@@ -145,7 +218,7 @@ if test "$1" = "deps"; then
 fi
 
 if test "$1" = "pydeps"; then
-	test -z "$PYDEPS" || sudo pip -q install $PYDEPS
+	test -z "$PYDEPS" || pip -q install --user $PYDEPS
 	exit $?
 fi
 
@@ -170,7 +243,16 @@ apidoc)
 esac
 
 echo "$ make $TARGET"
-make -j4 $TARGET || exit $?
+case "$TEST" in
+sonarcloud)
+	# without target, coverage is currently not supported anyway because
+	# sonarqube only supports gcov, not lcov
+	build-wrapper-linux-x86-64 --out-dir bw-output make -j4 || exit $?
+	;;
+*)
+	make -j4 $TARGET || exit $?
+	;;
+esac
 
 case "$TEST" in
 apidoc)
@@ -178,6 +260,13 @@ apidoc)
 		cat make.warnings
 		exit 1
 	fi
+	;;
+sonarcloud)
+	sonar-scanner \
+		-Dsonar.projectKey=strongswan \
+		-Dsonar.projectVersion=$(git describe)+${TRAVIS_BUILD_NUMBER} \
+		-Dsonar.sources=. \
+		-Dsonar.cfamily.build-wrapper-output=bw-output || exit $?
 	;;
 *)
 	;;

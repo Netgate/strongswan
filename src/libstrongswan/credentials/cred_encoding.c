@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -39,7 +39,7 @@ struct private_cred_encoding_t {
 	hashtable_t *cache[CRED_ENCODING_MAX];
 
 	/**
-	 * Registered encoding fuctions, cred_encoder_t
+	 * Registered encoding functions, cred_encoder_t
 	 */
 	linked_list_t *encoders;
 

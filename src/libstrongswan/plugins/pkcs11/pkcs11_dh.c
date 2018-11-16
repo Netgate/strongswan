@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -415,13 +415,15 @@ static chunk_t ecparams_lookup(diffie_hellman_group_t group)
 /**
  * Described in header.
  */
-pkcs11_dh_t *pkcs11_dh_create(diffie_hellman_group_t group,
-							  chunk_t g, chunk_t p)
+pkcs11_dh_t *pkcs11_dh_create(diffie_hellman_group_t group, ...)
 {
 	switch (group)
 	{
 		case MODP_CUSTOM:
 		{
+			chunk_t g, p;
+
+			VA_ARGS_GET(group, g, p);
 			return create_modp(group, p.len, g, p);
 		}
 		case ECP_192_BIT:

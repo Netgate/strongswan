@@ -1,7 +1,9 @@
 /*
- * Copyright (C) 2010-2013 Martin Willi, revosec AG
  * Copyright (C) 2013-2015 Andreas Steffen
- * HSR Hochschule für Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) 2010-2013 Martin Willi
+ * Copyright (C) 2010-2013 revosec AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -42,9 +44,10 @@ static void usage(FILE *out)
 {
 	fprintf(out,
 		"Usage: pt-tls  --connect <hostname|address> [--port <port>]\n"
-		"              [--cert <file>]+ [--key <file>] [--key-type rsa|ecdsa]\n"
-		"              [--client <client-id>] [--secret <password>]\n"
-		"              [--optionsfrom <filename>] [--quiet] [--debug <level>]\n");
+		"              [--certid <hex>|--cert <file>]+ [--keyid <hex>|--key <file>]\n"
+		"              [--key-type rsa|ecdsa] [--client <client-id>]\n"
+		"              [--secret <password>] [--mutual] [--quiet]\n"
+		"              [--debug <level>] [--options <filename>]\n");
 }
 
 /**
@@ -103,15 +106,26 @@ static mem_cred_t *creds;
 /**
  * Load certificate from file
  */
-static bool load_certificate(char *filename)
+static bool load_certificate(char *certid, char *filename)
 {
 	certificate_t *cert;
+	chunk_t chunk;
 
-	cert = lib->creds->create(lib->creds, CRED_CERTIFICATE, CERT_X509,
-							  BUILD_FROM_FILE, filename, BUILD_END);
+	if (certid)
+	{
+		chunk = chunk_from_hex(chunk_create(certid, strlen(certid)), NULL);
+		cert = lib->creds->create(lib->creds, CRED_CERTIFICATE, CERT_X509,
+								  BUILD_PKCS11_KEYID, chunk, BUILD_END);
+	}
+	else
+	{
+		cert = lib->creds->create(lib->creds, CRED_CERTIFICATE, CERT_X509,
+								  BUILD_FROM_FILE, filename, BUILD_END);
+	}
 	if (!cert)
 	{
-		DBG1(DBG_TLS, "loading certificate from '%s' failed", filename);
+		DBG1(DBG_TLS, "loading certificate from '%s' failed",
+					   certid ? certid : filename);
 		return FALSE;
 	}
 	creds->add_cert(creds, TRUE, cert);
@@ -121,15 +135,26 @@ static bool load_certificate(char *filename)
 /**
  * Load private key from file
  */
-static bool load_key(char *filename, key_type_t type)
+static bool load_key(char *keyid, char *filename, key_type_t type)
 {
 	private_key_t *key;
+	chunk_t chunk;
 
-	key = lib->creds->create(lib->creds, CRED_PRIVATE_KEY, type,
-							 BUILD_FROM_FILE, filename, BUILD_END);
+	if (keyid)
+	{
+		chunk = chunk_from_hex(chunk_create(keyid, strlen(keyid)), NULL);
+		key = lib->creds->create(lib->creds, CRED_PRIVATE_KEY, KEY_ANY,
+								 BUILD_PKCS11_KEYID, chunk, BUILD_END);
+		chunk_free(&chunk);
+	}
+	else
+	{
+		key = lib->creds->create(lib->creds, CRED_PRIVATE_KEY, type,
+								 BUILD_FROM_FILE, filename, BUILD_END);
+	}
 	if (!key)
 	{
-		DBG1(DBG_TLS, "loading key from '%s' failed", filename);
+		DBG1(DBG_TLS, "loading key from '%s' failed", keyid ? keyid : filename);
 		return FALSE;
 	}
 	creds->add_key(creds, key);
@@ -255,7 +280,8 @@ static void init()
 
 int main(int argc, char *argv[])
 {
-	char *address = NULL, *identity = "%any", *secret = NULL, *key_file = NULL;
+	char *address = NULL, *identity = "%any", *secret = NULL;
+	char *keyid = NULL, *key_file = NULL;
 	key_type_t key_type = KEY_RSA;
 	int port = PT_TLS_PORT;
 
@@ -269,27 +295,40 @@ int main(int argc, char *argv[])
 			{"client",		required_argument,		NULL,		'i' },
 			{"secret",		required_argument,		NULL,		's' },
 			{"port",		required_argument,		NULL,		'p' },
+			{"certid",		required_argument,		NULL,		'X' },
 			{"cert",		required_argument,		NULL,		'x' },
+			{"keyid",		required_argument,		NULL,		'K' },
 			{"key",			required_argument,		NULL,		'k' },
-			{"key-type",		required_argument,		NULL,		't' },
+			{"key-type",	required_argument,		NULL,		't' },
 			{"mutual",		no_argument,			NULL,		'm' },
 			{"quiet",		no_argument,			NULL,		'q' },
 			{"debug",		required_argument,		NULL,		'd' },
+			{"options",		required_argument,		NULL,		'+' },
 			{"optionsfrom",	required_argument,		NULL,		'+' },
 			{0,0,0,0 }
 		};
-		switch (getopt_long(argc, argv, "", long_opts, NULL))
+		switch (getopt_long(argc, argv, "hc:i:s:p:x:K:k:t:mqd:+:", long_opts,
+			    NULL))
 		{
 			case EOF:
 				break;
 			case 'h':			/* --help */
 				usage(stdout);
 				return 0;
-			case 'x':			/* --cert <file> */
-				if (!load_certificate(optarg))
+			case 'X':			/* --certid <hex> */
+				if (!load_certificate(optarg, NULL))
 				{
 					return 1;
 				}
+				continue;
+			case 'x':			/* --cert <file> */
+				if (!load_certificate(NULL, optarg))
+				{
+					return 1;
+				}
+				continue;
+			case 'K':			/* --keyid <hex> */
+				keyid = optarg;
 				continue;
 			case 'k':			/* --key <file> */
 				key_file = optarg;
@@ -352,7 +391,7 @@ int main(int argc, char *argv[])
 		usage(stderr);
 		return 1;
 	}
-	if (key_file && !load_key(key_file, key_type))
+	if ((keyid || key_file) && !load_key(keyid, key_file, key_type))
 	{
 		return 1;
 	}

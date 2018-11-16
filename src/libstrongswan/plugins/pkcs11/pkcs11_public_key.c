@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011-2015 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2010 Martin Willi
  * Copyright (C) 2010 revosec AG
@@ -201,7 +201,7 @@ METHOD(public_key_t, get_keysize, int,
 }
 
 METHOD(public_key_t, verify, bool,
-	private_pkcs11_public_key_t *this, signature_scheme_t scheme,
+	private_pkcs11_public_key_t *this, signature_scheme_t scheme, void *params,
 	chunk_t data, chunk_t sig)
 {
 	CK_MECHANISM_PTR mechanism;

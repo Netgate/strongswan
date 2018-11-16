@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -320,7 +320,7 @@ struct radius_message_t {
 radius_message_t *radius_message_create(radius_message_code_t code);
 
 /**
- * Parse and verify a recevied RADIUS message.
+ * Parse and verify a received RADIUS message.
  *
  * @param data			received message data
  * @return				radius_message_t object, NULL if length invalid

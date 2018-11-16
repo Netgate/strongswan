@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008-2009 Martin Willi
  * Copyright (C) 2007-2014 Andreas Steffen
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  * Copyright (C) 2003 Christoph Gysin, Simon Zwahlen
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -209,7 +209,8 @@ static chunk_t build_nonce(private_x509_ocsp_request_t *this)
 	}
 	rng->destroy(rng);
 	return asn1_wrap(ASN1_SEQUENCE, "cm", ASN1_nonce_oid,
-				asn1_simple_object(ASN1_OCTET_STRING, this->nonce));
+				asn1_wrap(ASN1_OCTET_STRING, "m",
+					asn1_simple_object(ASN1_OCTET_STRING, this->nonce)));
 }
 
 /**
@@ -275,7 +276,7 @@ static chunk_t build_optionalSignature(private_x509_ocsp_request_t *this,
 			return chunk_empty;
 	}
 
-	if (!this->key->sign(this->key, scheme, tbsRequest, &signature))
+	if (!this->key->sign(this->key, scheme, NULL, tbsRequest, &signature))
 	{
 		DBG1(DBG_LIB, "creating OCSP signature failed, skipped");
 		return chunk_empty;
@@ -371,7 +372,7 @@ METHOD(certificate_t, has_issuer, id_match_t,
 
 METHOD(certificate_t, issued_by, bool,
 	private_x509_ocsp_request_t *this, certificate_t *issuer,
-	signature_scheme_t *scheme)
+	signature_params_t **scheme)
 {
 	DBG1(DBG_LIB, "OCSP request validation not implemented!");
 	return FALSE;
