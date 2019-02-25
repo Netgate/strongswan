@@ -4,8 +4,14 @@
 build_botan()
 {
 	# same revision used in the build recipe of the testing environment
-	BOTAN_REV=1872f899716854927ecc68022fac318735be8824
+	BOTAN_REV=2.8.0
 	BOTAN_DIR=$TRAVIS_BUILD_DIR/../botan
+
+	if test -d "$BOTAN_DIR"; then
+		return
+	fi
+
+	echo "$ build_botan()"
 
 	# if the leak detective is enabled we have to disable threading support
 	# (used for std::async) as that causes invalid frees somehow, the
@@ -28,6 +34,67 @@ build_botan()
 	cd -
 }
 
+build_tss2()
+{
+	TSS2_REV=2.1.0
+	TSS2_PKG=tpm2-tss-$TSS2_REV
+	TSS2_DIR=$TRAVIS_BUILD_DIR/../$TSS2_PKG
+	TSS2_SRC=https://github.com/tpm2-software/tpm2-tss/releases/download/$TSS2_REV/$TSS2_PKG.tar.gz
+
+	if test -d "$TSS2_DIR"; then
+		return
+	fi
+
+	echo "$ build_tss2()"
+
+	# the default version of libgcrypt in Ubuntu 16.04 is too old
+	sudo apt-get update -qq && \
+	sudo apt-get install -qq libgcrypt20-dev &&
+	curl -L $TSS2_SRC | tar xz -C $TRAVIS_BUILD_DIR/.. &&
+	cd $TSS2_DIR &&
+	./configure &&
+	make -j4 >/dev/null &&
+	sudo make install >/dev/null &&
+	sudo ldconfig || exit $?
+	cd -
+}
+
+build_openssl()
+{
+	SSL_REV=1.1.1a
+	SSL_PKG=openssl-$SSL_REV
+	SSL_DIR=$TRAVIS_BUILD_DIR/../$SSL_PKG
+	SSL_SRC=https://www.openssl.org/source/$SSL_PKG.tar.gz
+	SSL_INS=/usr/local/ssl
+	SSL_OPT="shared no-tls no-dtls no-ssl3 no-zlib no-comp no-idea no-psk no-srp
+			 no-stdio no-tests enable-rfc3779 enable-ec_nistp_64_gcc_128"
+
+	if test -d "$SSL_DIR"; then
+		return
+	fi
+
+	echo "$ build_openssl()"
+
+	curl -L $SSL_SRC | tar xz -C $TRAVIS_BUILD_DIR/.. &&
+	cd $SSL_DIR &&
+	./config --prefix=$SSL_INS --openssldir=$SSL_INS $SSL_OPT &&
+	make -j4 >/dev/null &&
+	sudo make install_sw >/dev/null &&
+	echo $SSL_INS/lib | sudo tee /etc/ld.so.conf.d/openssl-$SSL_REV.conf >/dev/null &&
+	sudo ldconfig || exit $?
+	cd -
+}
+
+use_custom_openssl()
+{
+	CFLAGS="$CFLAGS -I/usr/local/ssl/include"
+	LDFLAGS="$LDFLAGS -L/usr/local/ssl/lib"
+	export LDFLAGS
+	if test "$1" = "deps"; then
+		build_openssl
+	fi
+}
+
 if test -z $TRAVIS_BUILD_DIR; then
 	TRAVIS_BUILD_DIR=$PWD
 fi
@@ -45,16 +112,20 @@ default)
 	# should be the default, but lets make sure
 	CONFIG="--with-printf-hooks=glibc"
 	;;
-openssl)
-	CONFIG="--disable-defaults --enable-pki --enable-openssl"
+openssl*)
+	CONFIG="--disable-defaults --enable-pki --enable-openssl --enable-pem"
 	DEPS="libssl-dev"
+	if test "$TEST" != "openssl-1.0"; then
+		DEPS=""
+		use_custom_openssl $1
+	fi
 	;;
 gcrypt)
 	CONFIG="--disable-defaults --enable-pki --enable-gcrypt --enable-pkcs1"
 	DEPS="libgcrypt11-dev"
 	;;
 botan)
-	CONFIG="--disable-defaults --enable-pki --enable-botan"
+	CONFIG="--disable-defaults --enable-pki --enable-botan --enable-pem"
 	# we can't use the old package that comes with Ubuntu so we build from
 	# the current master until 2.8.0 is released and then probably switch to
 	# that unless we need newer features (at least 2.7.0 plus PKCS#1 patch is
@@ -72,13 +143,9 @@ all|coverage|sonarcloud)
 			--disable-kernel-pfroute --disable-keychain
 			--disable-lock-profiler --disable-padlock --disable-fuzzing
 			--disable-osx-attr --disable-tkm --disable-uci
-			--disable-systemd --disable-soup --disable-unwind-backtraces
+			--disable-soup --disable-unwind-backtraces
 			--disable-svc --disable-dbghelp-backtraces --disable-socket-win
 			--disable-kernel-wfp --disable-kernel-iph --disable-winhttp"
-	# Ubuntu 14.04 does provide a too old libtss2-dev
-	CONFIG="$CONFIG --disable-tss-tss2"
-	# Ubuntu 14.04 does not provide libnm
-	CONFIG="$CONFIG --disable-nm"
 	# not enabled on the build server
 	CONFIG="$CONFIG --disable-af-alg"
 	if test "$TEST" != "coverage"; then
@@ -89,12 +156,14 @@ all|coverage|sonarcloud)
 	fi
 	DEPS="$DEPS libcurl4-gnutls-dev libsoup2.4-dev libunbound-dev libldns-dev
 		  libmysqlclient-dev libsqlite3-dev clearsilver-dev libfcgi-dev
-		  libpcsclite-dev libpam0g-dev binutils-dev libunwind8-dev
-		  libjson0-dev iptables-dev python-pip libtspi-dev"
+		  libpcsclite-dev libpam0g-dev binutils-dev libunwind8-dev libnm-dev
+		  libjson0-dev iptables-dev python-pip libtspi-dev libsystemd-dev"
 	PYDEPS="pytest"
 	if test "$1" = "deps"; then
 		build_botan
+		build_tss2
 	fi
+	use_custom_openssl $1
 	;;
 win*)
 	CONFIG="--disable-defaults --enable-svc --enable-ikev2
@@ -105,10 +174,12 @@ win*)
 			--enable-updown --enable-ext-auth --enable-libipsec
 			--enable-tnccs-20 --enable-imc-attestation --enable-imv-attestation
 			--enable-imc-os --enable-imv-os --enable-tnc-imv --enable-tnc-imc
-			--enable-pki --enable-swanctl --enable-socket-win"
+			--enable-pki --enable-swanctl --enable-socket-win
+			--enable-kernel-iph --enable-kernel-wfp --enable-winhttp"
 	# no make check for Windows binaries unless we run on a windows host
 	if test "$APPVEYOR" != "True"; then
 		TARGET=
+		CCACHE=ccache
 	else
 		CONFIG="$CONFIG --enable-openssl"
 		CFLAGS="$CFLAGS -I/c/OpenSSL-$TEST/include"
@@ -119,21 +190,14 @@ win*)
 	DEPS="gcc-mingw-w64-base"
 	case "$TEST" in
 	win64)
-		# headers on 12.04 are too old, so we only build the plugins here
-		CONFIG="--host=x86_64-w64-mingw32 $CONFIG --enable-dbghelp-backtraces
-				--enable-kernel-iph --enable-kernel-wfp --enable-winhttp"
+		CONFIG="--host=x86_64-w64-mingw32 $CONFIG --enable-dbghelp-backtraces"
 		DEPS="gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 mingw-w64-x86-64-dev $DEPS"
-		CC="x86_64-w64-mingw32-gcc"
-		# apply patch to MinGW headers
-		if test "$APPVEYOR" != "True" -a -z "$1"; then
-			sudo patch -f -p 4 -d /usr/share/mingw-w64/include < src/libcharon/plugins/kernel_wfp/mingw-w64-4.8.1.diff
-		fi
+		CC="$CCACHE x86_64-w64-mingw32-gcc"
 		;;
 	win32)
 		CONFIG="--host=i686-w64-mingw32 $CONFIG"
-		# currently only works on 12.04, so use mingw-w64-dev instead of mingw-w64-i686-dev
-		DEPS="gcc-mingw-w64-i686 binutils-mingw-w64-i686 mingw-w64-dev $DEPS"
-		CC="i686-w64-mingw32-gcc"
+		DEPS="gcc-mingw-w64-i686 binutils-mingw-w64-i686 mingw-w64-i686-dev $DEPS"
+		CC="$CCACHE i686-w64-mingw32-gcc"
 		;;
 	esac
 	;;
@@ -266,6 +330,7 @@ sonarcloud)
 		-Dsonar.projectKey=strongswan \
 		-Dsonar.projectVersion=$(git describe)+${TRAVIS_BUILD_NUMBER} \
 		-Dsonar.sources=. \
+		-Dsonar.cfamily.threads=2 \
 		-Dsonar.cfamily.build-wrapper-output=bw-output || exit $?
 	;;
 *)

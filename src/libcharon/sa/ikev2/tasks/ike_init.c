@@ -773,7 +773,7 @@ static bool derive_keys(private_ike_init_t *this,
 		return FALSE;
 	}
 	charon->bus->ike_keys(charon->bus, this->ike_sa, this->dh, chunk_empty,
-						  nonce_i, nonce_r, this->old_sa, NULL);
+						  nonce_i, nonce_r, this->old_sa, NULL, AUTH_NONE);
 	return TRUE;
 }
 
@@ -890,6 +890,20 @@ METHOD(task_t, pre_process_i, status_t,
 
 			switch (type)
 			{
+				case COOKIE:
+				{
+					chunk_t cookie;
+
+					cookie = notify->get_notification_data(notify);
+					if (chunk_equals(cookie, this->cookie))
+					{
+						DBG1(DBG_IKE, "ignore response with duplicate COOKIE "
+							 "notify");
+						enumerator->destroy(enumerator);
+						return FAILED;
+					}
+					break;
+				}
 				case REDIRECT:
 				{
 					identification_t *gateway;

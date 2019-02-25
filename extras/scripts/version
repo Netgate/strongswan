@@ -26,6 +26,10 @@ else
 fi
 CMTR=$(echo $CMT | sed 's/-/_/')
 
+if [ -n "${BUILD_VER_TIMESTAMP}" ]; then
+    BLD="~d${BUILD_VER_TIMESTAMP}"
+fi
+
 if [ -n "${BUILD_NUMBER}" ]; then
        BLD="~b${BUILD_NUMBER}"
 fi
@@ -48,5 +52,5 @@ fi
       echo -n ${TAG}-${ADD}${CMT:+~${CMT}}${BLD}
     fi
   else
-    echo -n ${TAG}-1
+    echo -n ${TAG}-1${BLD:+${BLD}}
 fi
