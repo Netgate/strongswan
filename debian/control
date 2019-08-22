@@ -1,0 +1,47 @@
+Source: netgate-strongswan
+Section: net
+Priority: extra
+Maintainer: Netgate <support@netgate.com>
+Standards-Version: 3.9.2
+Build-Depends: debhelper (>= 7.0.0), libssl-dev (>= 0.9.8), libcap-dev, network-manager-dev (>= 0.9), libnm-glib-dev (>= 0.9), libcurl4-openssl-dev | libcurl4-gnutls-dev | libcurl4-nss-dev, libldap2-dev, libmysqlclient-dev, libsqlite3-dev
+Homepage: http://www.strongswan.org
+
+Package: netgate-strongswan
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: IPsec VPN solution.
+ strongSwan is a IPsec based VPN solution for the Linux kernel. It uses the
+ native IPsec stack and runs on any recent 2.6 kernel (no patching required).
+ It supports both, the IKEv1 and the newer IKEv2 protocols.
+ .
+ This package contains the IKEv1/IKEv2 keying daemon charon and command line
+ configuration backend.
+
+Package: netgate-strongswan-kernel-vpp
+Architecture: any
+Depends: netgate-strongswan (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: IPsec VPN solution.
+ strongSwan is a IPsec based VPN solution for the Linux kernel. It uses the
+ native IPsec stack and runs on any recent 2.6 kernel (no patching required).
+ It supports both, the IKEv1 and the newer IKEv2 protocols.
+ .
+ This package provides a libcharon plugin that can propagate IKE SA data into
+ VPP. This can be used as an alternative to the other kernel plugins
+ {netlink, pfkey, libipsec}.
+
+Package: netgate-strongswan-tnc-imcvs
+Architecture: any
+Depends: netgate-strongswan (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: IPsec VPN solution.
+ strongSwan is a IPsec based VPN solution for the Linux kernel. It uses the
+ native IPsec stack and runs on any recent 2.6 kernel (no patching required).
+ It supports both, the IKEv1 and the newer IKEv2 protocols.
+ .
+ This package provides Trusted Network Connect's (TNC) architecture support.
+ It includes support for TNC client and server (IF-TNCCS), IMC and IMV message
+ exchange (IF-M), interface between IMC/IMV and TNC client/server (IF-IMC
+ and IF-IMV). It also includes PTS based IMC/IMV for TPM based remote
+ attestation, SWID IMC/IMV, and OS IMC/IMV. It's IMC/IMV dynamic libraries
+ modules can be used by any third party TNC Client/Server implementation
+ possessing a standard IF-IMC/IMV interface. In addition, it implements
+ PT-TLS to support TNC over TLS.

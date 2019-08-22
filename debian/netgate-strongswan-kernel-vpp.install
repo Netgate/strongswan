@@ -1,0 +1,2 @@
+etc/strongswan/strongswan.d/charon/kernel-vpp.conf			etc/strongswan/strongswan.d/charon
+usr/lib/strongswan/plugins/libstrongswan-kernel-vpp.so			usr/lib/strongswan/plugins
