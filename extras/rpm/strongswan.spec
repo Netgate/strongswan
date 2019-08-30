@@ -190,22 +190,22 @@ done
 %post
 /sbin/ldconfig
 %systemd_post %{real_name}.service
-%systemd_post %{real_name}-swanctl.service
+%systemd_post %{real_name}-starter.service
 
 %preun
 %systemd_preun %{real_name}.service
-%systemd_preun %{real_name}-swanctl.service
+%systemd_preun %{real_name}-starter.service
 
 %postun
 /sbin/ldconfig
 %systemd_postun_with_restart %{real_name}.service
-%systemd_postun_with_restart %{real_name}-swanctl.service
+%systemd_postun_with_restart %{real_name}-starter.service
 
 %files
 %doc README COPYING NEWS TODO
 %config(noreplace) %{_sysconfdir}/%{real_name}
 %{_unitdir}/%{real_name}.service
-%{_unitdir}/%{real_name}-swanctl.service
+%{_unitdir}/%{real_name}-starter.service
 %{_sbindir}/charon-systemd
 %dir %{_libdir}/%{real_name}
 %{_libdir}/%{real_name}/libcharon.so.0
@@ -288,6 +288,7 @@ done
 %{_libexecdir}/%{real_name}/imv_policy_manager
 %{_libexecdir}/%{real_name}/pki
 %{_libexecdir}/%{real_name}/aikgen
+%{_libexecdir}/%{real_name}/xfrmi
 %{_sbindir}/charon-cmd
 %{_sbindir}/%{real_name}
 %{_sbindir}/swanctl

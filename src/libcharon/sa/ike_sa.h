@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006-2018 Tobias Brunner
+ * Copyright (C) 2006-2019 Tobias Brunner
  * Copyright (C) 2006 Daniel Roethlisberger
  * Copyright (C) 2005-2009 Martin Willi
  * Copyright (C) 2005 Jan Hutter
@@ -161,6 +161,11 @@ enum ike_extension_t {
 	 * Postquantum Preshared Keys, draft-ietf-ipsecme-qr-ikev2
 	 */
 	EXT_PPK = (1<<15),
+
+	/**
+	 * Responder accepts childless IKE_SAs, RFC 6023
+	 */
+	EXT_IKE_CHILDLESS = (1<<16),
 };
 
 /**
@@ -1067,6 +1072,14 @@ struct ike_sa_t {
 	 * @param local			TRUE to clear local addresses, FALSE for remote
 	 */
 	void (*clear_virtual_ips) (ike_sa_t *this, bool local);
+
+	/**
+	 * Get interface ID to use as default for children of this IKE_SA.
+	 *
+	 * @param inbound		TRUE for inbound interface ID
+	 * @return				interface ID
+	 */
+	uint32_t (*get_if_id)(ike_sa_t *this, bool inbound);
 
 	/**
 	 * Create an enumerator over virtual IPs.

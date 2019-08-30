@@ -1274,26 +1274,6 @@ add_standard_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
              __func__);
         ipsec_sa_destroy(this->sas, newsa);
 
-    /* tunnel src/dst, spi, proto (ah|esp) match an existing SA */
-    /* keys can be updated if that's all that changed, otherwise replace */
-    } else if (!chunk_equals(currsa->enc_key, newsa->enc_key) ||
-                !chunk_equals(currsa->int_key, newsa->int_key)) {
-
-        DBG1(DBG_KNL, "kernel_vpp: %s: Update keys on SA ID %u",
-                __func__, currsa->sa_id);
-        if (!(ret = vmgmt_ipsec_sa_set_key(currsa->sa_id, (uint8_t) newsa->enc_key.len,
-                                    newsa->enc_key.ptr,
-                                    (uint8_t) newsa->int_key.len,
-                                    newsa->int_key.ptr)) ) {
-            chunk_clear(&currsa->enc_key);
-            chunk_clear(&currsa->int_key);
-            currsa->enc_key = chunk_clone(newsa->enc_key);
-            currsa->int_key = chunk_clone(newsa->int_key);
-        } else
-            DBG1(DBG_KNL, "kernel_vpp: %s: Key update on SA ID %u "
-                    "returned %d", __func__, currsa->sa_id, ret);
-        ipsec_sa_destroy(this->sas, newsa);
-
     } else if ((currsa->enc_alg != data->enc_alg) ||
                (currsa->int_alg != data->int_alg)) {
 

@@ -4,7 +4,7 @@
 build_botan()
 {
 	# same revision used in the build recipe of the testing environment
-	BOTAN_REV=2.8.0
+	BOTAN_REV=2.10.0
 	BOTAN_DIR=$TRAVIS_BUILD_DIR/../botan
 
 	if test -d "$BOTAN_DIR"; then
@@ -29,6 +29,33 @@ build_botan()
 	git checkout -qf $BOTAN_REV &&
 	python ./configure.py --amalgamation $BOTAN_CONFIG &&
 	make -j4 libs >/dev/null &&
+	sudo make install >/dev/null &&
+	sudo ldconfig || exit $?
+	cd -
+}
+
+build_wolfssl()
+{
+	WOLFSSL_REV=v4.0.0-stable
+	WOLFSSL_DIR=$TRAVIS_BUILD_DIR/../wolfssl
+
+	if test -d "$WOLFSSL_DIR"; then
+		return
+	fi
+
+	echo "$ build_wolfssl()"
+
+	WOLFSSL_CFLAGS="-DWOLFSSL_PUBLIC_MP -DWOLFSSL_DES_ECB"
+	WOLFSSL_CONFIG="--enable-keygen --enable-rsapss --enable-aesccm
+					--enable-aesctr --enable-des3 --enable-camellia
+					--enable-curve25519 --enable-ed25519"
+
+	git clone https://github.com/wolfSSL/wolfssl.git $WOLFSSL_DIR &&
+	cd $WOLFSSL_DIR &&
+	git checkout -qf $WOLFSSL_REV &&
+	./autogen.sh &&
+	./configure C_EXTRA_FLAGS="$WOLFSSL_CFLAGS" $WOLFSSL_CONFIG &&
+	make -j4 >/dev/null &&
 	sudo make install >/dev/null &&
 	sudo ldconfig || exit $?
 	cd -
@@ -61,13 +88,14 @@ build_tss2()
 
 build_openssl()
 {
-	SSL_REV=1.1.1a
+	SSL_REV=1.1.1b
 	SSL_PKG=openssl-$SSL_REV
 	SSL_DIR=$TRAVIS_BUILD_DIR/../$SSL_PKG
 	SSL_SRC=https://www.openssl.org/source/$SSL_PKG.tar.gz
 	SSL_INS=/usr/local/ssl
 	SSL_OPT="shared no-tls no-dtls no-ssl3 no-zlib no-comp no-idea no-psk no-srp
-			 no-stdio no-tests enable-rfc3779 enable-ec_nistp_64_gcc_128"
+			 no-stdio no-tests enable-rfc3779 enable-ec_nistp_64_gcc_128
+			 --api=1.1.0"
 
 	if test -d "$SSL_DIR"; then
 		return
@@ -114,6 +142,7 @@ default)
 	;;
 openssl*)
 	CONFIG="--disable-defaults --enable-pki --enable-openssl --enable-pem"
+	export TESTS_PLUGINS="test-vectors pem openssl!"
 	DEPS="libssl-dev"
 	if test "$TEST" != "openssl-1.0"; then
 		DEPS=""
@@ -122,10 +151,12 @@ openssl*)
 	;;
 gcrypt)
 	CONFIG="--disable-defaults --enable-pki --enable-gcrypt --enable-pkcs1"
+	export TESTS_PLUGINS="test-vectors pkcs1 gcrypt!"
 	DEPS="libgcrypt11-dev"
 	;;
 botan)
 	CONFIG="--disable-defaults --enable-pki --enable-botan --enable-pem"
+	export TESTS_PLUGINS="test-vectors pem botan!"
 	# we can't use the old package that comes with Ubuntu so we build from
 	# the current master until 2.8.0 is released and then probably switch to
 	# that unless we need newer features (at least 2.7.0 plus PKCS#1 patch is
@@ -133,6 +164,15 @@ botan)
 	DEPS=""
 	if test "$1" = "deps"; then
 		build_botan
+	fi
+	;;
+wolfssl)
+	CONFIG="--disable-defaults --enable-pki --enable-wolfssl --enable-pem"
+	export TESTS_PLUGINS="test-vectors pem wolfssl!"
+	# build with custom options to enable all the features the plugin supports
+	DEPS=""
+	if test "$1" = "deps"; then
+		build_wolfssl
 	fi
 	;;
 printf-builtin)
@@ -161,6 +201,7 @@ all|coverage|sonarcloud)
 	PYDEPS="pytest"
 	if test "$1" = "deps"; then
 		build_botan
+		build_wolfssl
 		build_tss2
 	fi
 	use_custom_openssl $1
@@ -324,6 +365,7 @@ apidoc)
 		cat make.warnings
 		exit 1
 	fi
+	rm make.warnings
 	;;
 sonarcloud)
 	sonar-scanner \
@@ -332,7 +374,16 @@ sonarcloud)
 		-Dsonar.sources=. \
 		-Dsonar.cfamily.threads=2 \
 		-Dsonar.cfamily.build-wrapper-output=bw-output || exit $?
+	rm -r bw-output .scannerwork
 	;;
 *)
 	;;
 esac
+
+# ensure there are no unignored build artifacts (or other changes) in the Git repo
+unclean="$(git status --porcelain)"
+if test -n "$unclean"; then
+	echo "Unignored build artifacts or other changes:"
+	echo "$unclean"
+	exit 1
+fi
