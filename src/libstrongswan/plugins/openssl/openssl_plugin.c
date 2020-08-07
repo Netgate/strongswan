@@ -243,8 +243,11 @@ static void threading_cleanup()
 
 #endif
 
+#if OPENSSL_VERSION_NUMBER < 0x1010100fL
 /**
  * Seed the OpenSSL RNG, if required
+ * Not necessary anymore with OpenSSL 1.1.1 (maybe wasn't already earlier, but
+ * it's now explicitly mentioned in the documentation).
  */
 static bool seed_rng()
 {
@@ -271,6 +274,7 @@ static bool seed_rng()
 	DESTROY_IF(rng);
 	return TRUE;
 }
+#endif /* OPENSSL_VERSION_NUMBER */
 
 /**
  * Generic key loader
@@ -493,6 +497,9 @@ METHOD(plugin_t, get_features, int,
 			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_CBC, 16),
 			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_CBC, 24),
 			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_CBC, 32),
+			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_ECB, 16),
+			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_ECB, 24),
+			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_ECB, 32),
 #endif
 #ifndef OPENSSL_NO_CAMELLIA
 			PLUGIN_PROVIDE(CRYPTER, ENCR_CAMELLIA_CBC, 16),
@@ -839,12 +846,14 @@ plugin_t *openssl_plugin_create()
 		"openssl FIPS mode(%d) - %sabled ", fips_mode, fips_mode ? "en" : "dis");
 #endif /* OPENSSL_FIPS */
 
+#if OPENSSL_VERSION_NUMBER < 0x1010100fL
 	if (!seed_rng())
 	{
 		DBG1(DBG_CFG, "no RNG found to seed OpenSSL");
 		destroy(this);
 		return NULL;
 	}
+#endif /* OPENSSL_VERSION_NUMBER */
 
 	return &this->public.plugin;
 }

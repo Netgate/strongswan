@@ -69,8 +69,8 @@
 #define IPSEC_POLICY_N_ACTION		4
 
 /* IPsec protocols */
-#define IPSEC_PROTOCOL_AH		0
-#define IPSEC_PROTOCOL_ESP		1
+#define IPSEC_PROTOCOL_ESP		0
+#define IPSEC_PROTOCOL_AH		1
 
 /*
  * Definitions and helper functions for strongswan plugin
@@ -491,7 +491,7 @@ convert_sa_to_vmgmt(vmgmt_ipsec_sa_t *v,
     memcpy(v->integ_key, data->int_key.ptr, data->int_key.len);
     v->esn = data->esn;
     v->anti_replay = data->replay_window;
-    v->tunnel_mode = vpp_mode(data->mode);
+    v->tunnel_mode = 0; /* tun protect uses transport mode SAs */
     v->addr_family = id->src->get_family(id->src);
     if (v->addr_family == AF_INET6) {
         addr_len = 16;
@@ -980,7 +980,7 @@ get_routed_sa_sw_if_index(private_kernel_vpp_ipsec_t *this, u32 inst_num)
     char intf_name[16] = {0};
     u32 sw_if_index;
 
-    snprintf(intf_name, sizeof(intf_name) - 1, "ipsec%u", inst_num);
+    snprintf(intf_name, sizeof(intf_name) - 1, "ipip%u", inst_num);
 
     vmgmt_intf_mark_dirty();
     sw_if_index = vmgmt_intf_get_sw_if_index_by_name(intf_name);
@@ -1232,7 +1232,7 @@ add_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
         /* if an SA exists for the other directions, bring up the interface */
         if (tnsr_vec_len(*sa_list_rev) > 0) {
             if (!interface_is_up(sw_if_index)) {
-                DBG1(DBG_KNL, "kernel_vpp: %s: Bringing up interface ipsec%u",
+                DBG1(DBG_KNL, "kernel_vpp: %s: Bringing up interface ipip%u",
                      __func__, inst_num);
                 vmgmt_intf_set_flags_admin(sw_if_index, 1);
             }
@@ -1617,7 +1617,7 @@ del_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
         if (tnsr_vec_len(*sa_list) == 0) {
 
             if (interface_is_up(sw_if_index) == 1) {
-                DBG1(DBG_KNL, "kernel_vpp: %s: Taking down interface ipsec%u",
+                DBG1(DBG_KNL, "kernel_vpp: %s: Taking down interface ipip%u",
                      __func__, inst_num);
                 vmgmt_intf_set_flags_admin(sw_if_index, 0);
             }

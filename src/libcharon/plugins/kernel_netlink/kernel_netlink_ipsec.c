@@ -409,10 +409,14 @@ static void route_entry_destroy(route_entry_t *this)
  */
 static bool route_entry_equals(route_entry_t *a, route_entry_t *b)
 {
-	return a->if_name && b->if_name && streq(a->if_name, b->if_name) &&
-		   a->src_ip->ip_equals(a->src_ip, b->src_ip) &&
-		   a->gateway->ip_equals(a->gateway, b->gateway) &&
-		   chunk_equals(a->dst_net, b->dst_net) && a->prefixlen == b->prefixlen;
+	if (a->if_name && b->if_name && streq(a->if_name, b->if_name) &&
+		a->src_ip->ip_equals(a->src_ip, b->src_ip) &&
+		chunk_equals(a->dst_net, b->dst_net) && a->prefixlen == b->prefixlen)
+	{
+		return (!a->gateway && !b->gateway) || (a->gateway && b->gateway &&
+					a->gateway->ip_equals(a->gateway, b->gateway));
+	}
+	return FALSE;
 }
 
 typedef struct ipsec_sa_t ipsec_sa_t;
@@ -1347,39 +1351,34 @@ static bool add_uint32(struct nlmsghdr *hdr, int buflen,
 #ifdef ETHTOOL_GFEATURES
 
 /**
- * IPsec HW offload state in kernel
- */
-typedef enum {
-	NL_OFFLOAD_UNKNOWN,
-	NL_OFFLOAD_UNSUPPORTED,
-	NL_OFFLOAD_SUPPORTED
-} nl_offload_state_t;
-
-/**
  * Global metadata used for IPsec HW offload
  */
 static struct {
+	/** determined HW offload support */
+	bool supported;
 	/** bit in feature set */
 	u_int bit;
 	/** total number of device feature blocks */
 	u_int total_blocks;
-	/** determined HW offload state */
-	nl_offload_state_t state;
 } netlink_hw_offload;
 
 /**
- * Check if kernel supports HW offload
+ * Check if kernel supports HW offload and determine feature flag
  */
-static void netlink_find_offload_feature(const char *ifname, int query_socket)
+static void netlink_find_offload_feature(const char *ifname)
 {
 	struct ethtool_sset_info *sset_info;
 	struct ethtool_gstrings *cmd = NULL;
 	struct ifreq ifr;
 	uint32_t sset_len, i;
 	char *str;
-	int err;
+	int err, query_socket;
 
-	netlink_hw_offload.state = NL_OFFLOAD_UNSUPPORTED;
+	query_socket = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_XFRM);
+	if (query_socket < 0)
+	{
+		return;
+	}
 
 	/* determine number of device features */
 	INIT_EXTRA(sset_info, sizeof(uint32_t),
@@ -1418,9 +1417,9 @@ static void netlink_find_offload_feature(const char *ifname, int query_socket)
 	{
 		if (strneq(str, "esp-hw-offload", ETH_GSTRING_LEN))
 		{
+			netlink_hw_offload.supported = TRUE;
 			netlink_hw_offload.bit = i;
 			netlink_hw_offload.total_blocks = (sset_len + 31) / 32;
-			netlink_hw_offload.state = NL_OFFLOAD_SUPPORTED;
 			break;
 		}
 		str += ETH_GSTRING_LEN;
@@ -1429,6 +1428,7 @@ static void netlink_find_offload_feature(const char *ifname, int query_socket)
 out:
 	free(sset_info);
 	free(cmd);
+	close(query_socket);
 }
 
 /**
@@ -1443,23 +1443,16 @@ static bool netlink_detect_offload(const char *ifname)
 	int block;
 	bool ret = FALSE;
 
+	if (!netlink_hw_offload.supported)
+	{
+		DBG1(DBG_KNL, "HW offload is not supported by kernel");
+		return FALSE;
+	}
+
 	query_socket = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_XFRM);
 	if (query_socket < 0)
 	{
 		return FALSE;
-	}
-
-	/* kernel requires a real interface in order to query the kernel-wide
-	 * capability, so we do it here on first invocation.
-	 */
-	if (netlink_hw_offload.state == NL_OFFLOAD_UNKNOWN)
-	{
-		netlink_find_offload_feature(ifname, query_socket);
-	}
-	if (netlink_hw_offload.state == NL_OFFLOAD_UNSUPPORTED)
-	{
-		DBG1(DBG_KNL, "HW offload is not supported by kernel");
-		goto out;
 	}
 
 	/* feature is supported by kernel, query device features */
@@ -1471,30 +1464,30 @@ static bool netlink_detect_offload(const char *ifname)
 	ifr.ifr_name[IFNAMSIZ-1] = '\0';
 	ifr.ifr_data = (void*)cmd;
 
-	if (ioctl(query_socket, SIOCETHTOOL, &ifr))
+	if (!ioctl(query_socket, SIOCETHTOOL, &ifr))
 	{
-		goto out_free;
+		block = netlink_hw_offload.bit / 32;
+		feature_bit = 1U << (netlink_hw_offload.bit % 32);
+		if (cmd->features[block].active & feature_bit)
+		{
+			ret = TRUE;
+		}
 	}
 
-	block = netlink_hw_offload.bit / 32;
-	feature_bit = 1U << (netlink_hw_offload.bit % 32);
-	if (cmd->features[block].active & feature_bit)
-	{
-		ret = TRUE;
-	}
-
-out_free:
-	free(cmd);
 	if (!ret)
 	{
 		DBG1(DBG_KNL, "HW offload is not supported by device");
 	}
-out:
+	free(cmd);
 	close(query_socket);
 	return ret;
 }
 
 #else
+
+static void netlink_find_offload_feature(const char *ifname)
+{
+}
 
 static bool netlink_detect_offload(const char *ifname)
 {
@@ -3697,6 +3690,10 @@ kernel_netlink_ipsec_t *kernel_netlink_ipsec_create()
 		lib->watcher->add(lib->watcher, this->socket_xfrm_events, WATCHER_READ,
 						  (watcher_cb_t)receive_events, this);
 	}
+
+	netlink_find_offload_feature(lib->settings->get_str(lib->settings,
+					"%s.plugins.kernel-netlink.hw_offload_feature_interface",
+					"lo", lib->ns));
 
 	return &this->public;
 }

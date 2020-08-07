@@ -1,6 +1,6 @@
 #
 # Copyright (C) 2007-2017 Tobias Brunner
-# Copyright (C) 2006-2017 Andreas Steffen
+# Copyright (C) 2006-2019 Andreas Steffen
 # Copyright (C) 2006-2014 Martin Willi
 # HSR Hochschule fuer Technik Rapperswil
 #
@@ -153,6 +153,7 @@ ARG_ENABL_SET([chapoly],        [enables the ChaCha20/Poly1305 AEAD plugin.])
 ARG_DISBL_SET([cmac],           [disable CMAC crypto implementation plugin.])
 ARG_ENABL_SET([ctr],            [enables the Counter Mode wrapper crypto plugin.])
 ARG_DISBL_SET([des],            [disable DES/3DES software implementation plugin.])
+ARG_DISBL_SET([drbg],           [disable the NIST Deterministic Random Bit Generator plugin.])
 ARG_DISBL_SET([fips-prf],       [disable FIPS PRF software implementation plugin.])
 ARG_ENABL_SET([gcm],            [enables the GCM AEAD wrapper crypto plugin.])
 ARG_ENABL_SET([gcrypt],         [enables the libgcrypt plugin.])
@@ -395,33 +396,35 @@ AC_PROG_LEX
 AC_PROG_YACC
 AM_PATH_PYTHON(,,[:])
 AC_PATH_PROG([PERL], [perl], [], [$PATH:/bin:/usr/bin:/usr/local/bin])
+AC_ARG_VAR([PERL], [the Perl interpreter])
 AC_PATH_PROG([GPERF], [gperf], [], [$PATH:/bin:/usr/bin:/usr/local/bin])
+AC_ARG_VAR([GPERF], [the GNU gperf program])
 
-# because gperf is not needed by end-users we just report it but do not abort on failure
-AC_MSG_CHECKING([gperf version >= 3.0.0])
+# because gperf is not needed by end-users we only abort if generated files don't exist
+AC_MSG_CHECKING([gperf len type])
 if test -x "$GPERF"; then
-	if test "`$GPERF --version | $AWK -F' ' '/^GNU gperf/ { print $3 }' | $AWK -F. '{ print $1 }'`" -ge "3"; then
-		GPERF_OUTPUT="`echo foo | ${GPERF}`"
-		AC_COMPILE_IFELSE(
+	GPERF_OUTPUT="`echo foo | ${GPERF}`"
+	AC_COMPILE_IFELSE(
+		[AC_LANG_PROGRAM(
+			[[#include <string.h>
+			  const char *in_word_set(const char*, size_t); $GPERF_OUTPUT]])],
+		[GPERF_LEN_TYPE=size_t],
+		[AC_COMPILE_IFELSE(
 			[AC_LANG_PROGRAM(
 				[[#include <string.h>
-				  const char *in_word_set(const char*, size_t); $GPERF_OUTPUT]])],
-			[GPERF_LEN_TYPE=size_t],
-			[AC_COMPILE_IFELSE(
-				[AC_LANG_PROGRAM(
-					[[#include <string.h>
-					  const char *in_word_set(const char*, unsigned); $GPERF_OUTPUT]])],
-				[GPERF_LEN_TYPE=unsigned],
-				[AC_MSG_ERROR([unable to determine gperf len type])]
-			)]
-		)
-		AC_SUBST(GPERF_LEN_TYPE)
-		AC_MSG_RESULT([yes])
-	else
-		AC_MSG_RESULT([no])
-	fi
+				  const char *in_word_set(const char*, unsigned); $GPERF_OUTPUT]])],
+			[GPERF_LEN_TYPE=unsigned],
+			[AC_MSG_ERROR([unable to determine gperf len type])]
+		)]
+	)
+	AC_SUBST(GPERF_LEN_TYPE)
+	AC_MSG_RESULT([$GPERF_LEN_TYPE])
 else
 	AC_MSG_RESULT([not found])
+	GPERF_TEST_FILE="$srcdir/src/libstrongswan/crypto/proposal/proposal_keywords_static.c"
+	if test ! -f "$GPERF_TEST_FILE"; then
+		AC_MSG_ERROR([GNU gperf required to generate e.g. $GPERF_TEST_FILE])
+	fi
 fi
 
 # ========================
@@ -1464,6 +1467,7 @@ ADD_PLUGIN([ctr],                  [s charon scripts nm cmd])
 ADD_PLUGIN([ccm],                  [s charon scripts nm cmd])
 ADD_PLUGIN([gcm],                  [s charon scripts nm cmd])
 ADD_PLUGIN([ntru],                 [s charon scripts nm cmd])
+ADD_PLUGIN([drbg],                 [s charon pki scripts nm cmd])
 ADD_PLUGIN([newhope],              [s charon scripts nm cmd])
 ADD_PLUGIN([bliss],                [s charon pki scripts nm cmd])
 ADD_PLUGIN([curl],                 [s charon scepclient pki scripts nm cmd])
@@ -1634,6 +1638,7 @@ AM_CONDITIONAL(USE_AF_ALG, test x$af_alg = xtrue)
 AM_CONDITIONAL(USE_NTRU, test x$ntru = xtrue)
 AM_CONDITIONAL(USE_NEWHOPE, test x$newhope = xtrue)
 AM_CONDITIONAL(USE_BLISS, test x$bliss = xtrue)
+AM_CONDITIONAL(USE_DRBG, test x$drbg = xtrue)
 
 #  charon plugins
 # ----------------
@@ -1911,6 +1916,7 @@ AC_CONFIG_FILES([
 	src/libstrongswan/plugins/ccm/Makefile
 	src/libstrongswan/plugins/gcm/Makefile
 	src/libstrongswan/plugins/af_alg/Makefile
+	src/libstrongswan/plugins/drbg/Makefile
 	src/libstrongswan/plugins/ntru/Makefile
 	src/libstrongswan/plugins/bliss/Makefile
 	src/libstrongswan/plugins/bliss/tests/Makefile

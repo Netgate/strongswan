@@ -241,6 +241,7 @@ done
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-constraints.so
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-des.so
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-dnskey.so
+%{_libdir}/%{real_name}/plugins/lib%{real_name}-drbg.so
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-fips-prf.so
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-gmp.so
 %{_libdir}/%{real_name}/plugins/lib%{real_name}-hmac.so
