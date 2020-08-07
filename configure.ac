@@ -63,7 +63,7 @@ ARG_WITH_SUBST([routing-table],      [220], [set routing table to use for IPsec 
 ARG_WITH_SUBST([routing-table-prio], [220], [set priority for IPsec routing table])
 ARG_WITH_SUBST([ipsec-script],       [ipsec], [change the name of the ipsec script])
 ARG_WITH_SUBST([fips-mode],          [0], [set openssl FIPS mode: disabled(0), enabled(1), Suite B enabled(2)])
-ARG_WITH_SUBST([libfuzzer],          [], [path to libFuzzer.a])
+ARG_WITH_SUBST([libfuzzer],          [], [-fsanitize=fuzzer or path to libFuzzer.a, a local driver is used if not specified])
 ARG_WITH_SET([capabilities],         [no], [set capability dropping library. Currently supported values are "libcap" and "native"])
 ARG_WITH_SET([mpz_powm_sec],         [yes], [use the more side-channel resistant mpz_powm_sec in libgmp, if available])
 ARG_WITH_SET([dev-headers],          [no], [install strongSwan development headers to directory.])
@@ -122,6 +122,13 @@ AC_ARG_WITH(
 	[VPP_DIR="$withval"]
 )
 AC_SUBST(VPP_DIR)
+
+AC_ARG_WITH(
+	[libtnsrinfradir],
+	[AS_HELP_STRING([--with-libtnsrinfradir=DIR], [use libtnsrinfra in DIR for build])],
+	[LIBTNSRINFRA_DIR="$withval"]
+)
+AC_SUBST(LIBTNSRINFRA_DIR)
 
 AC_MSG_CHECKING([configured UDP ports ($charon_udp_port, $charon_natt_port)])
 if test x$charon_udp_port != x0 -a x$charon_udp_port = x$charon_natt_port; then
@@ -665,7 +672,7 @@ AC_CHECK_FUNC(
 )
 
 AC_CHECK_FUNCS(prctl mallinfo getpass closefrom getpwnam_r getgrnam_r getpwuid_r)
-AC_CHECK_FUNCS(fmemopen funopen mmap memrchr setlinebuf strptime dirfd sigwaitinfo)
+AC_CHECK_FUNCS(fmemopen funopen mmap memrchr setlinebuf strptime dirfd sigwaitinfo explicit_bzero)
 
 AC_CHECK_FUNC([syslog], [
 	AC_DEFINE([HAVE_SYSLOG], [], [have syslog(3) and friends])
@@ -1309,18 +1316,26 @@ if test x$coverage = xtrue; then
 fi
 
 if test x$fuzzing = xtrue; then
-	if test x$libfuzzer = x; then
+	case "$libfuzzer" in
+	"")
 		AC_MSG_NOTICE([fuzz targets enabled without libFuzzer, using local driver])
 		CFLAGS="${CFLAGS} -fsanitize=address"
 		libfuzzer="libFuzzerLocal.a"
-	else
+		;;
+	"-fsanitize=fuzzer")
+		libfuzzer=""
+		FUZZING_CFLAGS="-fsanitize=fuzzer"
+		AC_SUBST(FUZZING_CFLAGS)
+		;;
+	*)
 		# required for libFuzzer
 		FUZZING_LDFLAGS="-stdlib=libc++ -lstdc++"
 		if test "$SANITIZER" = "coverage"; then
 			FUZZING_LDFLAGS="$FUZZING_LDFLAGS -lm"
 		fi
 		AC_SUBST(FUZZING_LDFLAGS)
-	fi
+		;;
+	esac
 fi
 
 if test x$ruby_gems = xtrue; then

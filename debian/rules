@@ -37,8 +37,10 @@ endif
 
 CFLAGS+=-I$(VPP_DIR)/build-root/install-vpp-native/vpp/include
 CFLAGS+=-I$(LIBVPPMGMT_DIR)/usr/include
+CFLAGS+=-I$(LIBTNSRINFRA_DIR)/usr/include
 LDFLAGS+=-L$(VPP_DIR)/build-root/install-vpp-native/vpp/lib
 LDFLAGS+=-L$(LIBVPPMGMT_DIR)/usr/lib
+LDFLAGS+=-L$(LIBTNSRINFRA_DIR)/usr/lib
 
 build:
 	dh_testdir
@@ -77,7 +79,8 @@ binary-arch: build install
 	dh_shlibdeps -- --ignore-missing-info \
 		-l$(STAGE_DESTDIR)/usr/lib/strongswan \
 		-l$(VPP_DIR)/build-root/install-vpp-native/vpp/lib \
-		-l$(LIBVPPMGMT_DIR)/usr/lib
+		-l$(LIBVPPMGMT_DIR)/usr/lib \
+		-l$(LIBTNSRINFRA_DIR)/usr/lib
 	dh_gencontrol -s
 	dh_md5sums
 	dh_builddeb -s

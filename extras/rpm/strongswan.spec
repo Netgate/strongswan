@@ -49,6 +49,15 @@ BuildRequires: libvppmgmt-devel
 %define custom_libvppmgmt_cppflags -I%{libvppmgmt_includedir}
 %define custom_libvppmgmt_ldflags -L%{libvppmgmt_libdir}
 %endif
+%if 0%{!?libtnsrinfra_dir:1}
+BuildRequires: libtnsrinfra-devel
+%else
+%define libtnsrinfra_includedir %{libtnsrinfra_dir}%{_includedir}
+%define libtnsrinfra_libdir %{libtnsrinfra_dir}%{_libdir}
+%define custom_libtnsrinfra_cppflags -I%{libtnsrinfra_includedir}
+%define custom_libtnsrinfra_ldflags -L%{libtnsrinfra_libdir}
+%endif
+
 
 %description
 The strongSwan IPsec implementation supports both the IKEv1 and IKEv2 key
@@ -59,7 +68,7 @@ Linux kernel.
 Summary: Module for strongswan to install IKE SAs and policies into VPP
 Group: System Environment/Daemons
 Requires: %{name} = %{version}
-Requires: libvppmgmt
+Requires: libtnsrinfra libvppmgmt
 Obsoletes: %{real_name}-kernel-vpp
 
 %description kernel-vpp
@@ -104,8 +113,8 @@ PT-TLS to support TNC over TLS.
 # --bindir moves 'pki' command to /usr/libexec/strongswan
 # See: http://wiki.strongswan.org/issues/552
 %configure --disable-static \
-    CPPFLAGS="%{?custom_vpp_cppflags: %{custom_vpp_cppflags}} %{?custom_libvppmgmt_cppflags: %{custom_libvppmgmt_cppflags}}" \
-    LDFLAGS="%{?custom_vpp_ldflags: %{custom_vpp_ldflags}} %{?custom_libvppmgmt_ldflags: %{custom_libvppmgmt_ldflags}}" \
+    CPPFLAGS="%{?custom_vpp_cppflags: %{custom_vpp_cppflags}} %{?custom_libvppmgmt_cppflags: %{custom_libvppmgmt_cppflags}} %{?custom_libtnsrinfra_cppflags: %{custom_libtnsrinfra_cppflags}}" \
+    LDFLAGS="%{?custom_vpp_ldflags: %{custom_vpp_ldflags}} %{?custom_libvppmgmt_ldflags: %{custom_libvppmgmt_ldflags}} %{?custom_libtnsrinfra_ldflags: %{custom_libtnsrinfra_ldflags}}" \
     --with-ipsec-script=%{real_name} \
     --sysconfdir=%{_sysconfdir}/%{real_name} \
     --with-ipsecdir=%{_libexecdir}/%{real_name} \

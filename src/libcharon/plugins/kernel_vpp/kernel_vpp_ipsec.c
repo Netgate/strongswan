@@ -27,9 +27,8 @@
 #include <collections/hashtable.h>
 #include <processing/jobs/callback_job.h>
 
-#include <vppinfra/mem.h>
-#include <vppinfra/vec.h>
-#include <vppinfra/pool.h>
+#include <tnsrinfra/vec.h>
+#include <tnsrinfra/pool.h>
 #include <vppmgmt/vpp_mgmt_api.h>
 
 #define PRIO_BASE 100000
@@ -949,18 +948,18 @@ find_routed_sa_data(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id)
 
     inst_num = id->mark.value - 1;
 
-    if (vec_len(this->sa_routed_in_by_inst) > inst_num) {
-        vec_foreach(sa_index, vec_elt(this->sa_routed_in_by_inst, inst_num)) {
-            sa_data = pool_elt_at_index(this->all_sas, *sa_index);
+    if (tnsr_vec_len(this->sa_routed_in_by_inst) > inst_num) {
+        tnsr_vec_foreach(sa_index, tnsr_vec_elt(this->sa_routed_in_by_inst, inst_num)) {
+            sa_data = tnsr_pool_elt_at_index(this->all_sas, *sa_index);
             if (stored_sa_cmp(id, sa_data) == 0) {
                 return sa_data;
             }
         }
     }
 
-    if (vec_len(this->sa_routed_out_by_inst) > inst_num) {
-        vec_foreach(sa_index, vec_elt(this->sa_routed_out_by_inst, inst_num)) {
-            sa_data = pool_elt_at_index(this->all_sas, *sa_index);
+    if (tnsr_vec_len(this->sa_routed_out_by_inst) > inst_num) {
+        tnsr_vec_foreach(sa_index, tnsr_vec_elt(this->sa_routed_out_by_inst, inst_num)) {
+            sa_data = tnsr_pool_elt_at_index(this->all_sas, *sa_index);
             if (stored_sa_cmp(id, sa_data) == 0) {
                 return sa_data;
             }
@@ -1183,10 +1182,10 @@ add_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 
         schedule_expire(this, id, data);
 
-        pool_get(this->all_sas, sa_data_p);
+        tnsr_pool_get(this->all_sas, sa_data_p);
         sa_index = sa_data_p - this->all_sas;
-        vec_validate(this->sa_routed_out_by_inst, inst_num);
-        vec_validate(this->sa_routed_in_by_inst, inst_num);
+        tnsr_vec_validate(this->sa_routed_out_by_inst, inst_num);
+        tnsr_vec_validate(this->sa_routed_in_by_inst, inst_num);
 
         vmgmt_get_interface_counters(sw_if_index, &counters);
 
@@ -1213,12 +1212,12 @@ add_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
         memcpy(sa_data_p, &sa_data, sizeof(sa_data));
 
         /* If there's an older SA that this one replaces, update it's stats */
-        if (vec_len(*sa_list) > 0) {
+        if (tnsr_vec_len(*sa_list) > 0) {
             u32 *prev_sa_index;
             sa_data_t *prev_sa;
 
-            prev_sa_index = vec_end(*sa_list) - 1;
-            prev_sa = pool_elt_at_index(this->all_sas, *prev_sa_index);
+            prev_sa_index = tnsr_vec_end(*sa_list) - 1;
+            prev_sa = tnsr_pool_elt_at_index(this->all_sas, *prev_sa_index);
 
             if (prev_sa->sa_conf.sa_id < sa_data.sa_conf.sa_id) {
 
@@ -1228,10 +1227,10 @@ add_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
             }
         }
 
-        vec_add1(*sa_list, sa_index);
+        tnsr_vec_add1(*sa_list, sa_index);
 
         /* if an SA exists for the other directions, bring up the interface */
-        if (vec_len(*sa_list_rev) > 0) {
+        if (tnsr_vec_len(*sa_list_rev) > 0) {
             if (!interface_is_up(sw_if_index)) {
                 DBG1(DBG_KNL, "kernel_vpp: %s: Bringing up interface ipsec%u",
                      __func__, inst_num);
@@ -1343,8 +1342,8 @@ tunnel_if_active_sa(private_kernel_vpp_ipsec_t *this, u32 inst_num,
     u32 sa_idx;
     sa_data_t *sa_data;
 
-    vec_validate_init_empty(this->sa_routed_out_by_inst, inst_num, 0);
-    vec_validate_init_empty(this->sa_routed_in_by_inst, inst_num, 0);
+    tnsr_vec_validate_init_empty(this->sa_routed_out_by_inst, inst_num, 0);
+    tnsr_vec_validate_init_empty(this->sa_routed_in_by_inst, inst_num, 0);
 
     if (outbound) {
         dir_list = this->sa_routed_out_by_inst;
@@ -1352,27 +1351,27 @@ tunnel_if_active_sa(private_kernel_vpp_ipsec_t *this, u32 inst_num,
         dir_list = this->sa_routed_in_by_inst;
     }
 
-    if (vec_len(dir_list) <= inst_num) {
+    if (tnsr_vec_len(dir_list) <= inst_num) {
         DBG1(DBG_KNL, "No %s SA list found for tunnel instance %u",
              (outbound) ? "outbound" : "inbound", inst_num);
         return NULL;
     }
 
-    sa_idx_list = vec_elt(dir_list, inst_num);
-    if (!sa_idx_list || !vec_len(sa_idx_list)) {
+    sa_idx_list = tnsr_vec_elt(dir_list, inst_num);
+    if (!sa_idx_list || !tnsr_vec_len(sa_idx_list)) {
         DBG1(DBG_KNL, "No %s SAs found for tunnel instance %u",
              (outbound) ? "outbound" : "inbound", inst_num);
         return NULL;
     }
 
-    sa_idx = vec_elt(sa_idx_list, vec_len(sa_idx_list) - 1);
-    if (sa_idx > pool_len(this->all_sas)) {
+    sa_idx = tnsr_vec_elt(sa_idx_list, tnsr_vec_len(sa_idx_list) - 1);
+    if (sa_idx > tnsr_pool_len(this->all_sas)) {
         DBG1(DBG_KNL, "Invalid %s SA index for tunnel instance %u",
              (outbound) ? "outbound" : "inbound", inst_num);
         return NULL;
     }
 
-    sa_data = pool_elt_at_index(this->all_sas, sa_idx);
+    sa_data = tnsr_pool_elt_at_index(this->all_sas, sa_idx);
 
     return sa_data;
 }
@@ -1587,12 +1586,12 @@ del_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
         u32 *index_p = NULL;
 
         if (sa->sa_conf.outbound) {
-            sa_list = vec_elt_at_index(this->sa_routed_out_by_inst, inst_num);
-            sa_list_rev = vec_elt_at_index(this->sa_routed_in_by_inst,
+            sa_list = tnsr_vec_elt_at_index(this->sa_routed_out_by_inst, inst_num);
+            sa_list_rev = tnsr_vec_elt_at_index(this->sa_routed_in_by_inst,
                                            inst_num);
         } else {
-            sa_list = vec_elt_at_index(this->sa_routed_in_by_inst, inst_num);
-            sa_list_rev = vec_elt_at_index(this->sa_routed_out_by_inst,
+            sa_list = tnsr_vec_elt_at_index(this->sa_routed_in_by_inst, inst_num);
+            sa_list_rev = tnsr_vec_elt_at_index(this->sa_routed_out_by_inst,
                                            inst_num);
         }
 
@@ -1605,9 +1604,9 @@ del_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
          * ordering when deleting so the last one in the list is the most
          * recently created one ( == the one that's active) */
 
-        vec_foreach(index_p, *sa_list) {
+        tnsr_vec_foreach(index_p, *sa_list) {
             if (*index_p == sa_index) {
-                vec_delete(*sa_list, 1, index_p - *sa_list);
+                tnsr_vec_delete(*sa_list, 1, index_p - *sa_list);
             }
         }
 
@@ -1615,7 +1614,7 @@ del_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
          * to 0 for the direction of the SA, bring the tunnel interface down.
          */
 
-        if (vec_len(*sa_list) == 0) {
+        if (tnsr_vec_len(*sa_list) == 0) {
 
             if (interface_is_up(sw_if_index) == 1) {
                 DBG1(DBG_KNL, "kernel_vpp: %s: Taking down interface ipsec%u",
@@ -1624,12 +1623,12 @@ del_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
             }
 
             /* clear the counters if there are no SAs in the other direction */
-            if (vec_len(*sa_list_rev) == 0) {
+            if (tnsr_vec_len(*sa_list_rev) == 0) {
                 vmgmt_intf_clear_counters(sw_if_index);
             }
         }
 
-        pool_put(this->all_sas, sa);
+        tnsr_pool_put(this->all_sas, sa);
 
     } else {
         DBG1(DBG_KNL, "kernel_vpp: %s: No SA found", __func__);
@@ -1951,17 +1950,17 @@ METHOD(kernel_ipsec_t, destroy, void,
     this->mutex->destroy(this->mutex);
     this->rng->destroy(this->rng);
 
-    vec_foreach(sa_list, this->sa_routed_in_by_inst) {
-        vec_free(*sa_list);
+    tnsr_vec_foreach(sa_list, this->sa_routed_in_by_inst) {
+        tnsr_vec_free(*sa_list);
     }
-    vec_free(this->sa_routed_in_by_inst);
+    tnsr_vec_free(this->sa_routed_in_by_inst);
 
-    vec_foreach(sa_list, this->sa_routed_out_by_inst) {
-        vec_free(*sa_list);
+    tnsr_vec_foreach(sa_list, this->sa_routed_out_by_inst) {
+        tnsr_vec_free(*sa_list);
     }
-    vec_free(this->sa_routed_out_by_inst);
+    tnsr_vec_free(this->sa_routed_out_by_inst);
 
-    pool_free(this->all_sas);
+    tnsr_pool_free(this->all_sas);
 
     vmgmt_disconnect();
     free(this);
@@ -2001,8 +2000,6 @@ kernel_vpp_ipsec_t *kernel_vpp_ipsec_create()
             .sa_routed_in_by_inst = NULL,
             .sa_routed_out_by_inst = NULL,
     );
-
-    clib_mem_init(NULL, 64 << 20);
 
     if (vmgmt_init("iked_ipsec", 0) < 0) {
         DBG1(DBG_KNL, "Connection to VPP API failed");

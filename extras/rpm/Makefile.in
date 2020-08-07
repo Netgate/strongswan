@@ -18,6 +18,10 @@ ifneq ($(strip ${LIBVPPMGMT_DIR}),)
 	LIBVPPMGMT_DEF=--define "libvppmgmt_dir $(LIBVPPMGMT_DIR)"
 endif
 
+ifneq ($(strip ${LIBTNSRINFRA_DIR}),)
+	LIBTNSRINFRA_DEF=--define "libtnsrinfra_dir $(LIBTNSRINFRA_DIR)"
+endif
+
 all: RPM
 
 spec:
@@ -30,6 +34,7 @@ srpm: spec
 	rpmbuild -bs \
 	  $(VPP_DEF) \
 	  $(LIBVPPMGMT_DEF) \
+	  $(LIBTNSRINFRA_DEF) \
 	  --define "_topdir $(RPMBUILD)" \
 	  --define "package_dirname $(BASENAME)" \
 	  --define "_version $(VERSION)" \
@@ -41,6 +46,7 @@ RPM: spec
 	rpmbuild -bb \
 	  $(VPP_DEF) \
 	  $(LIBVPPMGMT_DEF) \
+	  $(LIBTNSRINFRA_DEF) \
 	  --define "_topdir $(RPMBUILD)" \
 	  --define "package_dirname $(BASENAME)" \
 	  --define "_version $(VERSION)" \

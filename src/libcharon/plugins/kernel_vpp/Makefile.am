@@ -16,7 +16,7 @@ libstrongswan_kernel_vpp_la_SOURCES = \
 	kernel_vpp_plugin.h kernel_vpp_plugin.c \
 	kernel_vpp_ipsec.h kernel_vpp_ipsec.c
 
-libstrongswan_kernel_vpp_la_LIBADD = $(DLLIB) -lvppmgmt -lvppinfra -lpthread -lm -lrt
+libstrongswan_kernel_vpp_la_LIBADD = $(DLLIB) -lvppmgmt -ltnsrinfra -lpthread -lm -lrt
 
 libstrongswan_kernel_vpp_la_LDFLAGS = -module -avoid-version
 
