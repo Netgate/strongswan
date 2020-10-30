@@ -386,7 +386,9 @@ METHOD(task_t, process_r, status_t,
 			}
 
 			list = sa_payload->get_proposals(sa_payload);
-			if (!this->ike_sa->supports_extension(this->ike_sa, EXT_STRONGSWAN))
+			if (!this->ike_sa->supports_extension(this->ike_sa, EXT_STRONGSWAN)
+				&& !lib->settings->get_bool(lib->settings,
+									"%s.accept_private_algs", FALSE, lib->ns))
 			{
 				flags |= PROPOSAL_SKIP_PRIVATE;
 			}
@@ -406,7 +408,8 @@ METHOD(task_t, process_r, status_t,
 			this->ike_sa->set_proposal(this->ike_sa, this->proposal);
 
 			this->method = sa_payload->get_auth_method(sa_payload);
-			this->lifetime = sa_payload->get_lifetime(sa_payload);
+			this->lifetime = sa_payload->get_lifetime(sa_payload,
+													  this->proposal);
 
 			this->state = MM_SA;
 			return NEED_MORE;
@@ -640,7 +643,9 @@ METHOD(task_t, process_i, status_t,
 				return send_notify(this, INVALID_PAYLOAD_TYPE);
 			}
 			list = sa_payload->get_proposals(sa_payload);
-			if (!this->ike_sa->supports_extension(this->ike_sa, EXT_STRONGSWAN))
+			if (!this->ike_sa->supports_extension(this->ike_sa, EXT_STRONGSWAN)
+				&& !lib->settings->get_bool(lib->settings,
+									"%s.accept_private_algs", FALSE, lib->ns))
 			{
 				flags |= PROPOSAL_SKIP_PRIVATE;
 			}
@@ -654,7 +659,7 @@ METHOD(task_t, process_i, status_t,
 			}
 			this->ike_sa->set_proposal(this->ike_sa, this->proposal);
 
-			lifetime = sa_payload->get_lifetime(sa_payload);
+			lifetime = sa_payload->get_lifetime(sa_payload, this->proposal);
 			if (lifetime != this->lifetime)
 			{
 				DBG1(DBG_IKE, "received lifetime %us does not match configured "

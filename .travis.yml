@@ -1,6 +1,6 @@
 language: c
 
-sudo: required
+os: linux
 dist: bionic
 
 # don't build tags separately
@@ -35,21 +35,34 @@ env:
     - LEAK_DETECTIVE=no
     - MONOLITHIC=no
 
-matrix:
+jobs:
   include:
     - env: TEST=sonarcloud
       if: type = push AND env(SONAR_TOKEN) IS present
       git:
         depth: false
+      cache:
+        directories:
+          - $HOME/.sonar-cache
       addons:
         sonarcloud:
           organization: "strongswan"
+    - env: TEST=lgtm
+      if: type = push AND env(LGTM_TOKEN) IS present
+      git:
+        depth: false
     - env: TEST=osx
       compiler: clang
       os: osx
     - env: TEST=all
     - env: TEST=all
       compiler: clang
+    - env: TEST=all
+      arch: arm64
+    - env: TEST=all
+      arch: ppc64le
+    - env: TEST=all
+      arch: s390x
     - env: TEST=all
       dist: xenial
     - env: TEST=all
@@ -83,6 +96,8 @@ matrix:
     - env: TEST=printf-builtin LEAK_DETECTIVE=yes
     - env: TEST=printf-builtin LEAK_DETECTIVE=yes
       compiler: clang
+    - env: TEST=nm
+    - env: TEST=nm-no-glib
     # the crypto plugins are build-tested with clang via "all" above
     - env: TEST=botan
     - env: TEST=botan LEAK_DETECTIVE=yes

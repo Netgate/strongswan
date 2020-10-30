@@ -4,8 +4,8 @@
 build_botan()
 {
 	# same revision used in the build recipe of the testing environment
-	BOTAN_REV=2.12.1
-	BOTAN_DIR=$TRAVIS_BUILD_DIR/../botan
+	BOTAN_REV=0881f2c33ff7 # 2.13.0 + amalgamation patch
+	BOTAN_DIR=$DEPS_BUILD_DIR/botan
 
 	if test -d "$BOTAN_DIR"; then
 		return
@@ -22,7 +22,8 @@ build_botan()
 					  --disable-modules=locking_allocator"
 	fi
 	# disable some larger modules we don't need for the tests
-	BOTAN_CONFIG="$BOTAN_CONFIG --disable-modules=pkcs11,tls,x509,xmss"
+	BOTAN_CONFIG="$BOTAN_CONFIG --disable-modules=pkcs11,tls,x509,xmss
+				  --prefix=$DEPS_PREFIX"
 
 	git clone https://github.com/randombit/botan.git $BOTAN_DIR &&
 	cd $BOTAN_DIR &&
@@ -36,8 +37,8 @@ build_botan()
 
 build_wolfssl()
 {
-	WOLFSSL_REV=v4.2.0-stable
-	WOLFSSL_DIR=$TRAVIS_BUILD_DIR/../wolfssl
+	WOLFSSL_REV=87859f9e810b # v4.3.0-stable + IBM Z patch
+	WOLFSSL_DIR=$DEPS_BUILD_DIR/wolfssl
 
 	if test -d "$WOLFSSL_DIR"; then
 		return
@@ -46,7 +47,8 @@ build_wolfssl()
 	echo "$ build_wolfssl()"
 
 	WOLFSSL_CFLAGS="-DWOLFSSL_PUBLIC_MP -DWOLFSSL_DES_ECB"
-	WOLFSSL_CONFIG="--enable-keygen --enable-rsapss --enable-aesccm
+	WOLFSSL_CONFIG="--prefix=$DEPS_PREFIX
+					--enable-keygen --enable-rsapss --enable-aesccm
 					--enable-aesctr --enable-des3 --enable-camellia
 					--enable-curve25519 --enable-ed25519"
 
@@ -63,9 +65,9 @@ build_wolfssl()
 
 build_tss2()
 {
-	TSS2_REV=2.3.1
+	TSS2_REV=2.3.3
 	TSS2_PKG=tpm2-tss-$TSS2_REV
-	TSS2_DIR=$TRAVIS_BUILD_DIR/../$TSS2_PKG
+	TSS2_DIR=$DEPS_BUILD_DIR/$TSS2_PKG
 	TSS2_SRC=https://github.com/tpm2-software/tpm2-tss/releases/download/$TSS2_REV/$TSS2_PKG.tar.gz
 
 	if test -d "$TSS2_DIR"; then
@@ -74,23 +76,18 @@ build_tss2()
 
 	echo "$ build_tss2()"
 
-	# the default version of libgcrypt in Ubuntu 16.04 is too old
-	sudo apt-get update -qq && \
-	sudo apt-get install -qq libgcrypt20-dev &&
-	curl -L $TSS2_SRC | tar xz -C $TRAVIS_BUILD_DIR/.. &&
+	curl -L $TSS2_SRC | tar xz -C $DEPS_BUILD_DIR &&
 	cd $TSS2_DIR &&
-	./configure --disable-doxygen-doc &&
+	./configure --prefix=$DEPS_PREFIX --disable-doxygen-doc &&
 	make -j4 >/dev/null &&
 	sudo make install >/dev/null &&
 	sudo ldconfig || exit $?
 	cd -
 }
 
-if test -z $TRAVIS_BUILD_DIR; then
-	TRAVIS_BUILD_DIR=$PWD
-fi
-
-cd $TRAVIS_BUILD_DIR
+: ${TRAVIS_BUILD_DIR=$PWD}
+: ${DEPS_BUILD_DIR=$TRAVIS_BUILD_DIR/..}
+: ${DEPS_PREFIX=/usr/local}
 
 TARGET=check
 
@@ -142,11 +139,14 @@ all|coverage|sonarcloud)
 			--disable-kernel-pfroute --disable-keychain
 			--disable-lock-profiler --disable-padlock --disable-fuzzing
 			--disable-osx-attr --disable-tkm --disable-uci
-			--disable-soup --disable-unwind-backtraces
+			--disable-unwind-backtraces
 			--disable-svc --disable-dbghelp-backtraces --disable-socket-win
 			--disable-kernel-wfp --disable-kernel-iph --disable-winhttp"
 	# not enabled on the build server
 	CONFIG="$CONFIG --disable-af-alg"
+	if test "$TRAVIS_CPU_ARCH" != "amd64"; then
+		CONFIG="$CONFIG --disable-aesni --disable-rdrand"
+	fi
 	if test "$TEST" != "coverage"; then
 		CONFIG="$CONFIG --disable-coverage"
 	else
@@ -155,9 +155,9 @@ all|coverage|sonarcloud)
 	fi
 	DEPS="$DEPS libcurl4-gnutls-dev libsoup2.4-dev libunbound-dev libldns-dev
 		  libmysqlclient-dev libsqlite3-dev clearsilver-dev libfcgi-dev
-		  libpcsclite-dev libpam0g-dev binutils-dev libunwind8-dev libnm-dev
+		  libpcsclite-dev libpam0g-dev binutils-dev libnm-dev libgcrypt20-dev
 		  libjson-c-dev iptables-dev python-pip libtspi-dev libsystemd-dev"
-	PYDEPS="pytest"
+	PYDEPS="tox"
 	if test "$1" = "deps"; then
 		build_botan
 		build_wolfssl
@@ -270,6 +270,17 @@ fuzzing)
 			symbolize=1:handle_segv=1:fast_unwind_on_fatal=0:external_symbolizer_path=/usr/bin/llvm-symbolizer-3.5
 	fi
 	;;
+nm|nm-no-glib)
+	DEPS="gnome-common libsecret-1-dev libgtk-3-dev libnm-dev libnma-dev"
+	if test "$TEST" = "nm"; then
+		DEPS="$DEPS libnm-glib-vpn-dev libnm-gtk-dev"
+	else
+		CONFIG="$CONFIG --without-libnm-glib"
+	fi
+	cd src/frontends/gnome
+	# don't run ./configure with ./autogen.sh
+	export NOCONFIGURE=1
+	;;
 dist)
 	TARGET=distcheck
 	;;
@@ -277,6 +288,69 @@ apidoc)
 	DEPS="doxygen"
 	CONFIG="--disable-defaults"
 	TARGET=apidoc
+	;;
+lgtm)
+	DEPS="jq"
+
+	if test -z "$1"; then
+		# fall back to the parent of the latest commit (on new branches we might
+		# not have a range, also on duplicate branches)
+		base="${TRAVIS_COMMIT}^"
+		if test -n "$TRAVIS_COMMIT_RANGE"; then
+			base="${TRAVIS_COMMIT_RANGE%...*}"
+			# after rebases, the first commit ID in the range might not be valid
+			git rev-parse -q --verify $base
+			if [ $? != 0 ]; then
+				# this will always compare against master, while the range
+				# otherwise only contains "new" commits
+				base=$(git merge-base origin/master ${TRAVIS_COMMIT})
+			fi
+		fi
+		base=$(git rev-parse $base)
+		project_id=1506185006272
+
+		echo "Starting code review for $TRAVIS_COMMIT (base $base) on lgtm.com"
+		git diff --binary $base > lgtm.patch || exit $?
+		curl -s -X POST --data-binary @lgtm.patch \
+			"https://lgtm.com/api/v1.0/codereviews/${project_id}?base=${base}&external-id=${TRAVIS_BUILD_NUMBER}" \
+			-H 'Content-Type: application/octet-stream' \
+			-H 'Accept: application/json' \
+			-H "Authorization: Bearer ${LGTM_TOKEN}" > lgtm.res || exit $?
+		lgtm_check_url=$(jq -r '."task-result-url"' lgtm.res)
+		if [ "$lgtm_check_url" = "null" ]; then
+			cat lgtm.res | jq
+			exit 1
+		fi
+		lgtm_url=$(jq -r '."task-result"."results-url"' lgtm.res)
+		echo "Progress and full results: ${lgtm_url}"
+
+		echo -n "Waiting for completion: "
+		lgtm_status=pending
+		while [ "$lgtm_status" = "pending" ]; do
+			sleep 15
+			curl -s -X GET "${lgtm_check_url}" \
+				-H 'Accept: application/json' \
+				-H "Authorization: Bearer ${LGTM_TOKEN}" > lgtm.res
+			if [ $? != 0 ]; then
+				echo -n "-"
+				continue
+			fi
+			echo -n "."
+			lgtm_status=$(jq -r '.status' lgtm.res)
+		done
+		echo ""
+
+		if [ "$lgtm_status" != "success" ]; then
+			lgtm_message=$(jq -r '.["status-message"]' lgtm.res)
+			echo "Code review failed: ${lgtm_message}"
+			exit 1
+		fi
+		lgtm_new=$(jq -r '.languages[].new' lgtm.res | awk '{t+=$1} END {print t}')
+		lgtm_fixed=$(jq -r '.languages[].fixed' lgtm.res | awk '{t+=$1} END {print t}')
+		echo -n "Code review complete: "
+		printf "%b\n" "\e[1;31m${lgtm_new}\e[0m new alerts, \e[1;32m${lgtm_fixed}\e[0m fixed"
+		exit $lgtm_new
+	fi
 	;;
 *)
 	echo "$0: unknown test $TEST" >&2
@@ -292,8 +366,6 @@ if test "$1" = "deps"; then
 		;;
 	osx)
 		brew update && \
-		# workaround for issue #6352
-		brew uninstall --force libtool && brew install libtool && \
 		brew install $DEPS
 		;;
 	freebsd)
@@ -361,6 +433,8 @@ sonarcloud)
 		-Dsonar.projectVersion=$(git describe)+${TRAVIS_BUILD_NUMBER} \
 		-Dsonar.sources=. \
 		-Dsonar.cfamily.threads=2 \
+		-Dsonar.cfamily.cache.enabled=true \
+		-Dsonar.cfamily.cache.path=$HOME/.sonar-cache \
 		-Dsonar.cfamily.build-wrapper-output=bw-output || exit $?
 	rm -r bw-output .scannerwork
 	;;

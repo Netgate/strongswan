@@ -38,6 +38,7 @@ AC_DEFINE([CONFIG_H_INCLUDED], [], [defined if config.h included])
 AC_DISABLE_STATIC
 PKG_PROG_PKG_CONFIG
 
+m4_include(m4/macros/pkg-check-var.m4)
 m4_include(m4/macros/split-package-version.m4)
 SPLIT_PACKAGE_VERSION
 
@@ -55,7 +56,7 @@ ARG_WITH_SUBST([piddir],             [/var/run], [set path for PID and UNIX sock
 ARG_WITH_SUBST([ipsecdir],           [${libexecdir%/}/ipsec], [set installation path for ipsec tools])
 ARG_WITH_SUBST([ipseclibdir],        [${libdir%/}/ipsec], [set installation path for ipsec libraries])
 ARG_WITH_SUBST([plugindir],          [${ipseclibdir%/}/plugins], [set the installation path of plugins])
-ARG_WITH_SUBST([imcvdir],            [${ipseclibdir%/}/imcvs], [set the installation path of IMC and IMV dynamic librariers])
+ARG_WITH_SUBST([imcvdir],            [${ipseclibdir%/}/imcvs], [set the installation path of IMC and IMV dynamic libraries])
 ARG_WITH_SUBST([nm-ca-dir],          [/usr/share/ca-certificates], [directory the NM backend uses to look up trusted root certificates])
 ARG_WITH_SUBST([swanctldir],         [${sysconfdir}/swanctl], [base directory for swanctl configuration files and credentials])
 ARG_WITH_SUBST([linux-headers],      [\${top_srcdir}/src/include], [set directory of linux header files to use])
@@ -76,6 +77,15 @@ if test -n "$PKG_CONFIG"; then
 fi
 ARG_WITH_SET([systemdsystemunitdir], [$systemdsystemunitdir_default], [directory for systemd service files])
 AC_SUBST(systemdsystemunitdir)
+
+AC_ARG_WITH(
+	[dbuspolicydir],
+	AS_HELP_STRING([--with-dbuspolicydir=arg],[directory for D-Bus policies (default: ${dbusdatadir|datarootdir}/dbus-1/system.d)]),
+	[dbuspolicydir="$withval"],
+	[PKG_CHECK_VAR([dbusdatadir], [dbus-1], [datadir], , [dbusdatadir="${datarootdir}"])
+	 dbuspolicydir="${dbusdatadir}/dbus-1/system.d"]
+)
+AC_SUBST(dbuspolicydir)
 
 AC_ARG_WITH(
 	[user],
@@ -1051,22 +1061,24 @@ if test x$tss_tss2 = xtrue; then
 	PKG_CHECK_MODULES(tss2_esys, [tss2-esys],
 		[tss2_esys=true; AC_DEFINE([TSS2_ESYS], [], [use TSS2 v2 Extended System API])],
 		[tss2_esys=false])
-	PKG_CHECK_MODULES(tss2_tabrmd, [tcti-tabrmd],
-		[tss2_tabrmd=true; AC_DEFINE([TSS2_TCTI_TABRMD], [], [use TCTI Access Broker and Resource Mamager])],
-		[tss2_tabrmd=false])
-	PKG_CHECK_MODULES(tss2_socket, [tcti-socket],
-		[tss2_socket=true; AC_DEFINE([TSS2_TCTI_SOCKET], [], [use TCTI Sockets])],
-		[tss2_socket=false])
 	if test x$tss2_sys = xtrue; then
 		AC_DEFINE([TSS_TSS2_V2], [], [use TSS 2.0 v2 libraries])
 		AC_SUBST(tss2_CFLAGS, "$tss2_sys_CFLAGS")
 		AC_SUBST(tss2_LIBS, "$tss2_sys_LIBS")
-	elif test x$tss2_tabrmd = xtrue -o x$tss2_socket = xtrue; then
-		AC_DEFINE([TSS_TSS2_V1], [], [use TSS 2.0 v1 libraries])
-		AC_SUBST(tss2_CFLAGS, "$tss2_tabrmd_CFLAGS $tss2_socket_CFLAGS")
-		AC_SUBST(tss2_LIBS, "$tss2_tabrmd_LIBS $tss2_socket_LIBS")
 	else
-		AC_MSG_FAILURE([no TSS2 TCTI or SAPI libraries detected])
+		PKG_CHECK_MODULES(tss2_tabrmd, [tcti-tabrmd],
+			[tss2_tabrmd=true; AC_DEFINE([TSS2_TCTI_TABRMD], [], [use TCTI Access Broker and Resource Manager])],
+			[tss2_tabrmd=false])
+		PKG_CHECK_MODULES(tss2_socket, [tcti-socket],
+			[tss2_socket=true; AC_DEFINE([TSS2_TCTI_SOCKET], [], [use TCTI Sockets])],
+			[tss2_socket=false])
+		if test x$tss2_tabrmd = xtrue -o x$tss2_socket = xtrue; then
+			AC_DEFINE([TSS_TSS2_V1], [], [use TSS 2.0 v1 libraries])
+			AC_SUBST(tss2_CFLAGS, "$tss2_tabrmd_CFLAGS $tss2_socket_CFLAGS")
+			AC_SUBST(tss2_LIBS, "$tss2_tabrmd_LIBS $tss2_socket_LIBS")
+		else
+			AC_MSG_FAILURE([no TSS2 TCTI or SAPI libraries detected])
+		fi
 	fi
 fi
 
@@ -1163,11 +1175,9 @@ if test x$openssl = xtrue; then
 fi
 
 if test x$wolfssl = xtrue; then
-	wolfssl_lib=wolfssl
-	AC_CHECK_LIB([$wolfssl_lib],[wolfSSL_Init],[LIBS="$LIBS"],
-		[AC_MSG_ERROR([wolfSSL lib$wolfssl_lib not found])],[$DLLIB])
-	AC_SUBST(WOLFSSL_LIB, [-l$wolfssl_lib])
-	AC_CHECK_HEADER([wolfssl/options.h],,[AC_MSG_ERROR([wolfSSL header wolfssl/options.h not found!])])
+	PKG_CHECK_MODULES(wolfssl, [wolfssl])
+	AC_SUBST(wolfssl_CFLAGS)
+	AC_SUBST(wolfssl_LIBS)
 fi
 
 if test x$gcrypt = xtrue; then
@@ -1214,6 +1224,13 @@ if test x$nm = xtrue; then
 	PKG_CHECK_MODULES(nm, [gthread-2.0 libnm])
 	AC_SUBST(nm_CFLAGS)
 	AC_SUBST(nm_LIBS)
+
+	AC_MSG_CHECKING([for D-Bus policy directory])
+	if test -n "$dbuspolicydir" -a "x$dbuspolicydir" != xno; then
+		AC_MSG_RESULT([$dbuspolicydir])
+	else
+		AC_MSG_ERROR([not found (try --with-dbuspolicydir)])
+	fi
 fi
 
 if test x$xauth_pam = xtrue; then
@@ -1222,7 +1239,7 @@ if test x$xauth_pam = xtrue; then
 fi
 
 if test x$connmark = xtrue -o x$forecast = xtrue; then
-	PKG_CHECK_MODULES(libiptc, [libiptc])
+	PKG_CHECK_MODULES(libiptc, [libip4tc])
 	AC_SUBST(libiptc_CFLAGS)
 	AC_SUBST(libiptc_LIBS)
 fi
@@ -1367,6 +1384,7 @@ if test x$python_eggs = xtrue; then
 	else
 		AC_SUBST(PYTHONEGGINSTALLDIR, "--install-dir $pythoneggdir")
 	fi
+	AC_PATH_PROG([TOX], [tox], [], [$PATH:/bin:/usr/bin:/usr/local/bin])
 	AC_PATH_PROG([PY_TEST], [py.test], [], [$PATH:/bin:/usr/bin:/usr/local/bin])
 fi
 AM_CONDITIONAL(PYTHON_EGGS_INSTALL, [test "x$python_eggs_install" = xtrue])
@@ -1384,6 +1402,9 @@ AC_CACHE_CHECK(
 )
 if test "x$ss_cv_static_plugin_constructors" = xyes; then
 	static_plugin_constructors=true
+	if test "$PYTHON" = ":"; then
+		AC_MSG_FAILURE([Python is required to resolve plugin constructors statically])
+	fi
 fi
 
 # ===============================================
@@ -1788,7 +1809,8 @@ AM_CONDITIONAL(USE_LEGACY_SYSTEMD, test -n "$systemdsystemunitdir" -a "x$systemd
 AM_CONDITIONAL(USE_RUBY_GEMS, test x$ruby_gems = xtrue)
 AM_CONDITIONAL(USE_PYTHON_EGGS, test x$python_eggs = xtrue)
 AM_CONDITIONAL(USE_PERL_CPAN, test x$perl_cpan = xtrue)
-AM_CONDITIONAL(USE_PY_TEST, test "x$PY_TEST" != x)
+AM_CONDITIONAL(USE_TOX, test "x$TOX" != x)
+AM_CONDITIONAL(USE_PY_TEST, test "x$PY_TEST" != x -a "x$TOX" = x)
 
 # ========================
 #  set global definitions

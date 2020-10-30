@@ -1,6 +1,4 @@
 /*
- * Copyright 2016-2018 Rubicon Communications, LLC
- *
  * Copyright (C) 2006-2019 Tobias Brunner
  * Copyright (C) 2016 Andreas Steffen
  * Copyright (C) 2005-2008 Martin Willi
@@ -151,7 +149,7 @@ struct private_child_sa_t {
 	uint32_t unique_id;
 
 	/**
-	 * Whether FWD policieis in the outbound direction should be installed
+	 * Whether FWD policies in the outbound direction should be installed
 	 */
 	bool policies_fwd_out;
 

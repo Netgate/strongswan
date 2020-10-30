@@ -1,6 +1,4 @@
 /*
- * Copyright 2016-2018 Rubicon Communications, LLC
- *
  * Copyright (C) 2006-2007 Martin Willi
  * Copyright (C) 2006 Tobias Brunner, Daniel Roethlisberger
  * HSR Hochschule fuer Technik Rapperswil
@@ -268,9 +266,6 @@ static void process_payloads(private_ike_natd_t *this, message_t *message)
 METHOD(task_t, process_i, status_t,
 	private_ike_natd_t *this, message_t *message)
 {
-	/* No NAT-T, only ESP */
-	return SUCCESS;
-
 	process_payloads(this, message);
 
 	if (message->get_exchange_type(message) == IKE_SA_INIT)
@@ -299,9 +294,6 @@ METHOD(task_t, build_i, status_t,
 	ike_cfg_t *ike_cfg;
 	host_t *host;
 
-	/* No NAT-T, only ESP */
-	return NEED_MORE;
-
 	if (this->hasher == NULL)
 	{
 		DBG1(DBG_IKE, "unable to build NATD payloads, SHA1 not supported");
@@ -321,7 +313,7 @@ METHOD(task_t, build_i, status_t,
 	/* source may be any, we have 3 possibilities to get our source address:
 	 * 1. It is defined in the config => use the one of the IKE_SA
 	 * 2. We do a routing lookup in the kernel interface
-	 * 3. Include all possbile addresses
+	 * 3. Include all possible addresses
 	 */
 	host = message->get_source(message);
 	if (!host->is_anyaddr(host) || force_encap(ike_cfg))
@@ -374,9 +366,6 @@ METHOD(task_t, build_r, status_t,
 	notify_payload_t *notify;
 	host_t *me, *other;
 
-	/* No NAT-T, only ESP */
-	return SUCCESS;
-
 	/* only add notifies on successful responses. */
 	if (message->get_exchange_type(message) == IKE_SA_INIT &&
 		message->get_payload(message, PLV2_SECURITY_ASSOCIATION) == NULL)
@@ -412,9 +401,6 @@ METHOD(task_t, build_r, status_t,
 METHOD(task_t, process_r, status_t,
 	private_ike_natd_t *this, message_t *message)
 {
-	/* No NAT-T, only ESP */
-	return NEED_MORE;
-
 	process_payloads(this, message);
 
 	return NEED_MORE;

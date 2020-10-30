@@ -744,8 +744,8 @@ static void apply_lifetimes(private_quick_mode_t *this, sa_payload_t *sa_payload
 	uint32_t lifetime;
 	uint64_t lifebytes;
 
-	lifetime = sa_payload->get_lifetime(sa_payload);
-	lifebytes = sa_payload->get_lifebytes(sa_payload);
+	lifetime = sa_payload->get_lifetime(sa_payload, this->proposal);
+	lifebytes = sa_payload->get_lifebytes(sa_payload, this->proposal);
 	if (this->lifetime != lifetime)
 	{
 		DBG1(DBG_IKE, "received %us lifetime, configured %us",
@@ -1132,7 +1132,9 @@ METHOD(task_t, process_r, status_t,
 				DESTROY_IF(list);
 				list = sa_payload->get_proposals(sa_payload);
 			}
-			if (!this->ike_sa->supports_extension(this->ike_sa, EXT_STRONGSWAN))
+			if (!this->ike_sa->supports_extension(this->ike_sa, EXT_STRONGSWAN)
+				&& !lib->settings->get_bool(lib->settings,
+									"%s.accept_private_algs", FALSE, lib->ns))
 			{
 				flags |= PROPOSAL_SKIP_PRIVATE;
 			}
@@ -1145,9 +1147,6 @@ METHOD(task_t, process_r, status_t,
 														   flags);
 			list->destroy_offset(list, offsetof(proposal_t, destroy));
 
-			get_lifetimes(this);
-			apply_lifetimes(this, sa_payload);
-
 			if (!this->proposal)
 			{
 				DBG1(DBG_IKE, "no matching proposal found, sending %N",
@@ -1155,6 +1154,9 @@ METHOD(task_t, process_r, status_t,
 				return send_notify(this, NO_PROPOSAL_CHOSEN);
 			}
 			this->spi_i = this->proposal->get_spi(this->proposal);
+
+			get_lifetimes(this);
+			apply_lifetimes(this, sa_payload);
 
 			if (!get_nonce(this, &this->nonce_i, message))
 			{
@@ -1370,7 +1372,9 @@ METHOD(task_t, process_i, status_t,
 				DESTROY_IF(list);
 				list = sa_payload->get_proposals(sa_payload);
 			}
-			if (!this->ike_sa->supports_extension(this->ike_sa, EXT_STRONGSWAN))
+			if (!this->ike_sa->supports_extension(this->ike_sa, EXT_STRONGSWAN)
+				&& !lib->settings->get_bool(lib->settings,
+									"%s.accept_private_algs", FALSE, lib->ns))
 			{
 				flags |= PROPOSAL_SKIP_PRIVATE;
 			}

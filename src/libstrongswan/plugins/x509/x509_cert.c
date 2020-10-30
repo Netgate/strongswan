@@ -137,7 +137,7 @@ struct private_x509_cert_t {
 	linked_list_t *permitted_names;
 
 	/**
-	 * List of exluced name constraints
+	 * List of excluded name constraints
 	 */
 	linked_list_t *excluded_names;
 
@@ -2198,6 +2198,8 @@ static chunk_t generate_ts(traffic_selector_t *ts)
 static bool generate(private_x509_cert_t *cert, certificate_t *sign_cert,
 					 private_key_t *sign_key, int digest_alg)
 {
+	const chunk_t keyUsageCrlSign = chunk_from_chars(0x01, 0x02);
+	const chunk_t keyUsageCertSignCrlSign = chunk_from_chars(0x01, 0x06);
 	chunk_t extensions = chunk_empty, extendedKeyUsage = chunk_empty;
 	chunk_t serverAuth = chunk_empty, clientAuth = chunk_empty;
 	chunk_t ocspSigning = chunk_empty, certPolicies = chunk_empty;
@@ -2317,11 +2319,11 @@ static bool generate(private_x509_cert_t *cert, certificate_t *sign_cert,
 												chunk_from_chars(0xFF)),
 											pathLenConstraint)));
 		/* set CertificateSign and implicitly CRLsign */
-		keyUsageBits = chunk_from_chars(0x01, 0x06);
+		keyUsageBits = keyUsageCertSignCrlSign;
 	}
 	else if (cert->flags & X509_CRL_SIGN)
 	{
-		keyUsageBits = chunk_from_chars(0x01, 0x02);
+		keyUsageBits = keyUsageCrlSign;
 	}
 	if (keyUsageBits.len)
 	{

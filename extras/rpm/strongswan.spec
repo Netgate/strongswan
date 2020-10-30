@@ -2,12 +2,12 @@
 %define	real_name	strongswan
 Name: netgate-strongswan
 Version: %{_version}
-Release: %{_release}
+Release: %{_release}%{?dist}
 Summary: An OpenSource IPsec-based VPN and TNC solution
 Group: System Environment/Daemons
 License: GPLv2+
 URL: http://www.strongswan.org/
-Source: %{real_name}-%{version}-%{release}.tar.gz
+Source: %{real_name}-%{version}-%{_release}.tar.gz
 
 Obsoletes: %{real_name}
 BuildRequires:  gmp-devel autoconf automake gperf
@@ -57,6 +57,7 @@ BuildRequires: libtnsrinfra-devel
 %define custom_libtnsrinfra_cppflags -I%{libtnsrinfra_includedir}
 %define custom_libtnsrinfra_ldflags -L%{libtnsrinfra_libdir}
 %endif
+Requires: tnsr-dataplane-netns
 
 
 %description
@@ -199,21 +200,25 @@ done
 %post
 /sbin/ldconfig
 %systemd_post %{real_name}.service
+%systemd_post %{real_name}-dataplane.service
 %systemd_post %{real_name}-starter.service
 
 %preun
 %systemd_preun %{real_name}.service
+%systemd_preun %{real_name}-dataplane.service
 %systemd_preun %{real_name}-starter.service
 
 %postun
 /sbin/ldconfig
 %systemd_postun_with_restart %{real_name}.service
+%systemd_postun_with_restart %{real_name}-dataplane.service
 %systemd_postun_with_restart %{real_name}-starter.service
 
 %files
 %doc README COPYING NEWS TODO
 %config(noreplace) %{_sysconfdir}/%{real_name}
 %{_unitdir}/%{real_name}.service
+%{_unitdir}/%{real_name}-dataplane.service
 %{_unitdir}/%{real_name}-starter.service
 %{_sbindir}/charon-systemd
 %dir %{_libdir}/%{real_name}

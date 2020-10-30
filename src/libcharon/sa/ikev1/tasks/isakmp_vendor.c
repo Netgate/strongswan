@@ -1,6 +1,4 @@
 /*
- * Copyright 2016-2018 Rubicon Communications, LLC
- *
  * Copyright (C) 2012-2013 Tobias Brunner
  * Copyright (C) 2009 Martin Willi
  * HSR Hochschule fuer Technik Rapperswil
@@ -123,7 +121,7 @@ static struct {
 	/* NAT-Traversal VIDs ordered by preference */
 
 	/* NAT-Traversal, MD5("RFC 3947") */
-/*	{ "NAT-T (RFC 3947)", EXT_NATT, TRUE, 16,
+	{ "NAT-T (RFC 3947)", EXT_NATT, TRUE, 16,
 	  "\x4a\x13\x1c\x81\x07\x03\x58\x45\x5c\x57\x28\xf2\x0e\x95\x45\x2f"},
 
 	{ "draft-ietf-ipsec-nat-t-ike-03", EXT_NATT | EXT_NATT_DRAFT_02_03,
@@ -163,7 +161,7 @@ static struct {
 	  "\x61\x05\xc4\x22\xe7\x68\x47\xe4\x3f\x96\x84\x80\x12\x92\xae\xcd"},
 
 	{ "draft-stenberg-ipsec-nat-traversal-01", 0, FALSE, 16,
-	  "\x27\xba\xb5\xdc\x01\xea\x07\x60\xea\x4e\x31\x90\xac\x27\xc0\xd0"}, */
+	  "\x27\xba\xb5\xdc\x01\xea\x07\x60\xea\x4e\x31\x90\xac\x27\xc0\xd0"},
 
 };
 
