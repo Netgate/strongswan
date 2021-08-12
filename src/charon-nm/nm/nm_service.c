@@ -23,6 +23,7 @@
 #include <utils/identification.h>
 #include <config/peer_cfg.h>
 #include <credentials/certificates/x509.h>
+#include <networking/tun_device.h>
 
 #include <stdio.h>
 
@@ -40,6 +41,8 @@ typedef struct {
 	nm_creds_t *creds;
 	/* attribute handler for DNS/NBNS server information */
 	nm_handler_t *handler;
+	/* dummy TUN device */
+	tun_device_t *tun;
 	/* name of the connection */
 	char *name;
 } NMStrongswanPluginPrivate;
@@ -128,7 +131,18 @@ static void signal_ip_config(NMVpnServicePlugin *plugin,
 	/* NM apparently requires to know the gateway */
 	other = ike_sa->get_other_host(ike_sa);
 	g_variant_builder_add (&builder, "{sv}", NM_VPN_PLUGIN_CONFIG_EXT_GATEWAY,
-	                       host_to_variant(other));
+						   host_to_variant(other));
+
+	/* systemd-resolved requires a device to properly install DNS servers, but
+	 * Netkey does not use one.  Passing the physical interface is not ideal,
+	 * as NM fiddles around with it and systemd-resolved likes a separate
+	 * device. So we pass a dummy TUN device along for NM etc. to play with...
+	 */
+	if (priv->tun)
+	{
+		g_variant_builder_add (&builder, "{sv}", NM_VPN_PLUGIN_CONFIG_TUNDEV,
+							   g_variant_new_string (priv->tun->get_name(priv->tun)));
+	}
 
 	/* pass the first virtual IPs we got or use the physical IP */
 	enumerator = ike_sa->create_virtual_ip_enumerator(ike_sa, TRUE);
@@ -307,22 +321,12 @@ METHOD(listener_t, child_updown, bool,
 	NMStrongswanPluginPrivate *this, ike_sa_t *ike_sa, child_sa_t *child_sa,
 	bool up)
 {
-	if (this->ike_sa == ike_sa)
+	if (this->ike_sa == ike_sa && up)
 	{
-		if (up)
-		{	/* disable initiate-failure-detection hooks */
-			this->listener.ike_state_change = NULL;
-			this->listener.child_state_change = NULL;
-			signal_ip_config(this->plugin, ike_sa, child_sa);
-		}
-		else
-		{
-			if (ike_sa->has_condition(ike_sa, COND_REAUTHENTICATING))
-			{	/* we ignore this during reauthentication */
-				return TRUE;
-			}
-			signal_failure(this->plugin, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED);
-		}
+		/* disable initiate-failure-detection hooks */
+		this->listener.ike_state_change = NULL;
+		this->listener.child_state_change = NULL;
+		signal_ip_config(this->plugin, ike_sa, child_sa);
 	}
 	return TRUE;
 }
@@ -618,7 +622,6 @@ static gboolean connect_(NMVpnServicePlugin *plugin, NMConnection *connection,
 	peer_cfg_create_t peer = {
 		.cert_policy = CERT_SEND_IF_ASKED,
 		.unique = UNIQUE_REPLACE,
-		.keyingtries = 1,
 		.rekey_time = 36000, /* 10h */
 		.jitter_time = 600, /* 10min */
 		.over_time = 600, /* 10min */
@@ -632,6 +635,8 @@ static gboolean connect_(NMVpnServicePlugin *plugin, NMConnection *connection,
 			},
 		},
 		.mode = MODE_TUNNEL,
+		.dpd_action = ACTION_RESTART,
+		.close_action = ACTION_RESTART,
 	};
 
 	/**
@@ -651,6 +656,11 @@ static gboolean connect_(NMVpnServicePlugin *plugin, NMConnection *connection,
 		 priv->name);
 	DBG4(DBG_CFG, "%s",
 		 nm_setting_to_string(NM_SETTING(vpn)));
+	if (!priv->tun)
+	{
+		DBG1(DBG_CFG, "failed to create dummy TUN device, might affect DNS "
+			 "server installation negatively");
+	}
 	ike.remote = (char*)nm_setting_vpn_get_data_item(vpn, "address");
 	if (!ike.remote || !*ike.remote)
 	{
@@ -834,15 +844,39 @@ static gboolean connect_(NMVpnServicePlugin *plugin, NMConnection *connection,
 	}
 	else
 	{
-		child_cfg->add_proposal(child_cfg, proposal_create_default(PROTO_ESP));
 		child_cfg->add_proposal(child_cfg, proposal_create_default_aead(PROTO_ESP));
+		child_cfg->add_proposal(child_cfg, proposal_create_default(PROTO_ESP));
 	}
 	ts = traffic_selector_create_dynamic(0, 0, 65535);
 	child_cfg->add_traffic_selector(child_cfg, TRUE, ts);
-	ts = traffic_selector_create_from_cidr("0.0.0.0/0", 0, 0, 65535);
-	child_cfg->add_traffic_selector(child_cfg, FALSE, ts);
-	ts = traffic_selector_create_from_cidr("::/0", 0, 0, 65535);
-	child_cfg->add_traffic_selector(child_cfg, FALSE, ts);
+	str = nm_setting_vpn_get_data_item(vpn, "remote-ts");
+	if (str && strlen(str))
+	{
+		enumerator = enumerator_create_token(str, ";", "");
+		while (enumerator->enumerate(enumerator, &str))
+		{
+			ts = traffic_selector_create_from_cidr((char*)str, 0, 0, 65535);
+			if (!ts)
+			{
+				g_set_error(err, NM_VPN_PLUGIN_ERROR,
+							NM_VPN_PLUGIN_ERROR_LAUNCH_FAILED,
+							"Invalid remote traffic selector.");
+				enumerator->destroy(enumerator);
+				child_cfg->destroy(child_cfg);
+				peer_cfg->destroy(peer_cfg);
+				return FALSE;
+			}
+			child_cfg->add_traffic_selector(child_cfg, FALSE, ts);
+		}
+		enumerator->destroy(enumerator);
+	}
+	else
+	{
+		ts = traffic_selector_create_from_cidr("0.0.0.0/0", 0, 0, 65535);
+		child_cfg->add_traffic_selector(child_cfg, FALSE, ts);
+		ts = traffic_selector_create_from_cidr("::/0", 0, 0, 65535);
+		child_cfg->add_traffic_selector(child_cfg, FALSE, ts);
+	}
 	peer_cfg->add_child_cfg(peer_cfg, child_cfg);
 
 	/**
@@ -850,18 +884,13 @@ static gboolean connect_(NMVpnServicePlugin *plugin, NMConnection *connection,
 	 */
 	ike_sa = charon->ike_sa_manager->checkout_by_config(charon->ike_sa_manager,
 														peer_cfg);
+	peer_cfg->destroy(peer_cfg);
 	if (!ike_sa)
 	{
-		peer_cfg->destroy(peer_cfg);
 		g_set_error(err, NM_VPN_PLUGIN_ERROR, NM_VPN_PLUGIN_ERROR_LAUNCH_FAILED,
 					"IKE version not supported.");
 		return FALSE;
 	}
-	if (!ike_sa->get_peer_cfg(ike_sa))
-	{
-		ike_sa->set_peer_cfg(ike_sa, peer_cfg);
-	}
-	peer_cfg->destroy(peer_cfg);
 
 	/**
 	 * Register listener, enable  initiate-failure-detection hooks
@@ -974,6 +1003,11 @@ static gboolean do_disconnect(gpointer plugin)
 			enumerator->destroy(enumerator);
 			charon->controller->terminate_ike(charon->controller, id, FALSE,
 											  controller_cb_empty, NULL, 0);
+
+			/* clear secrets as we are asked for new secrets (where we'd find
+			 * the cached secrets from earlier connections) before we clear
+			 * them in connect() */
+			priv->creds->clear(priv->creds);
 			return FALSE;
 		}
 	}
@@ -1011,7 +1045,26 @@ static void nm_strongswan_plugin_init(NMStrongswanPlugin *plugin)
 	priv->listener.ike_reestablish_pre = _ike_reestablish_pre;
 	priv->listener.ike_reestablish_post = _ike_reestablish_post;
 	charon->bus->add_listener(charon->bus, &priv->listener);
+	priv->tun = tun_device_create(NULL);
 	priv->name = NULL;
+}
+
+/**
+ * Destructor
+ */
+static void nm_strongswan_plugin_dispose(GObject *obj)
+{
+	NMStrongswanPlugin *plugin;
+	NMStrongswanPluginPrivate *priv;
+
+	plugin = NM_STRONGSWAN_PLUGIN(obj);
+	priv = NM_STRONGSWAN_PLUGIN_GET_PRIVATE(plugin);
+	if (priv->tun)
+	{
+		priv->tun->destroy(priv->tun);
+		priv->tun = NULL;
+	}
+	G_OBJECT_CLASS (nm_strongswan_plugin_parent_class)->dispose (obj);
 }
 
 /**
@@ -1025,6 +1078,7 @@ static void nm_strongswan_plugin_class_init(
 	parent_class->connect = connect_;
 	parent_class->need_secrets = need_secrets;
 	parent_class->disconnect = disconnect;
+	G_OBJECT_CLASS(strongswan_class)->dispose = nm_strongswan_plugin_dispose;
 }
 
 /**

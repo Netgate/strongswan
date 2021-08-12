@@ -780,55 +780,9 @@ static int
 add_del_policy_route(private_kernel_vpp_ipsec_t *this, policy_entry_t *p,
 					uint8_t add)
 {
-	traffic_selector_t *rts;
-	host_t *dest;
-	uint8_t len, is_ipv6;
-	char dstbuf[40], gwbuf[40];
-	struct route_add_del_args r = {{0}};
-	char *table_name;
-
-	if (!p || !p->src_ts || !p->dst_ts || !p->sa || !p->sa->dst)
-		return -1;
-
-	rts = remote_ts(p->src_ts, p->dst_ts, vpp_outbound(p->direction));
-	rts->to_subnet(rts, &dest, &len);
-	is_ipv6 = (ts_get_family(rts) == AF_INET6) ? 1 : 0;
-
-	inet_ntop(ts_get_family(rts),
-				(dest->get_address(dest)).ptr, dstbuf, sizeof(dstbuf));
-	inet_ntop(ts_get_family(rts),
-				(p->sa->dst->get_address(p->sa->dst)).ptr, gwbuf,sizeof(gwbuf));
-
-	if (is_ipv6) {
-		table_name = "ipv4-VRF:0";
-	} else {
-		table_name = "ipv6-VRF:0";
-	}
-
-	strncpy(r.route_table_name, table_name, sizeof(r.route_table_name));
-	r.is_add = (add);
-	r.is_ipv6 = is_ipv6;
-	memcpy(r.dest_prefix, (dest->get_address(dest)).ptr, (is_ipv6) ? 16 : 4);
-	r.dest_mask_len = len;
-	memcpy(r.nh_addr, (p->sa->dst->get_address(p->sa->dst)).ptr,
-		(is_ipv6) ? 16 : 4);
-	r.nh_weight = 0;
-	r.nh_preference = 0;
-	/* r.nh_table_name */
-	r.nh_ifi = htonl(~0),
-	r.classify_table_index = htonl(~0);
-	r.is_drop = 0;
-	r.is_unreachable = 0;
-	r.is_prohibit = 0;
-	r.is_local = 0;
-	r.is_classify = 0;
-	r.is_multipath = 0;
-	r.is_resolve_host = 0;
-	r.is_resolve_attached = 0;
-	
-	return vmgmt_route_add_del_args(&r);
+	return 0;
 }
-							
+
 static int
 add_del_policy(private_kernel_vpp_ipsec_t *this, policy_entry_t *p,
 				uint8_t add)

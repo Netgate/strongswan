@@ -302,7 +302,13 @@ METHOD(task_t, build_i, status_t,
 		}
 		case MM_SA:
 		{
+			identification_t *id;
 			uint16_t group;
+
+			/* we might need the identity to look up a PSK when processing the
+			 * response */
+			id = this->ph1->get_id(this->ph1, this->peer_cfg, TRUE);
+			this->ike_sa->set_my_id(this->ike_sa, id->clone(id));
 
 			if (!this->ph1->create_hasher(this->ph1))
 			{
@@ -331,8 +337,7 @@ METHOD(task_t, build_i, status_t,
 			id_payload_t *id_payload;
 			identification_t *id;
 
-			id = this->ph1->get_id(this->ph1, this->peer_cfg, TRUE);
-			this->ike_sa->set_my_id(this->ike_sa, id->clone(id));
+			id = this->ike_sa->get_my_id(this->ike_sa);
 			id_payload = id_payload_create_from_identification(PLV1_ID, id);
 			message->add_payload(message, &id_payload->payload_interface);
 
@@ -371,7 +376,8 @@ METHOD(task_t, process_r, status_t,
 
 			this->ike_sa->update_hosts(this->ike_sa,
 									   message->get_destination(message),
-									   message->get_source(message), TRUE);
+									   message->get_source(message),
+									   UPDATE_HOSTS_FORCE_ADDRS);
 
 			sa_payload = (sa_payload_t*)message->get_payload(message,
 													PLV1_SECURITY_ASSOCIATION);

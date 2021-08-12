@@ -1,3 +1,14 @@
+NetworkManager-strongswan-1.5.2
+-------------------------------
+
+- Reduce height of config dialog by moving options/proposals to tabs
+- Migrated appdata to metainfo (renamed and moved the file)
+
+NetworkManager-strongswan-1.5.1
+-------------------------------
+
+- Fixes password entry for private keys
+
 NetworkManager-strongswan-1.5.0
 -------------------------------
 

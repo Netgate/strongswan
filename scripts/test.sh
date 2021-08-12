@@ -1,10 +1,10 @@
 #!/bin/sh
-# Build script for Travis CI
+# Build script for CI
 
 build_botan()
 {
 	# same revision used in the build recipe of the testing environment
-	BOTAN_REV=0881f2c33ff7 # 2.13.0 + amalgamation patch
+	BOTAN_REV=2.17.1
 	BOTAN_DIR=$DEPS_BUILD_DIR/botan
 
 	if test -d "$BOTAN_DIR"; then
@@ -37,7 +37,7 @@ build_botan()
 
 build_wolfssl()
 {
-	WOLFSSL_REV=87859f9e810b # v4.3.0-stable + IBM Z patch
+	WOLFSSL_REV=v4.7.0-stable
 	WOLFSSL_DIR=$DEPS_BUILD_DIR/wolfssl
 
 	if test -d "$WOLFSSL_DIR"; then
@@ -46,11 +46,14 @@ build_wolfssl()
 
 	echo "$ build_wolfssl()"
 
-	WOLFSSL_CFLAGS="-DWOLFSSL_PUBLIC_MP -DWOLFSSL_DES_ECB"
+	WOLFSSL_CFLAGS="-DWOLFSSL_PUBLIC_MP -DWOLFSSL_DES_ECB -DHAVE_ECC_BRAINPOOL"
 	WOLFSSL_CONFIG="--prefix=$DEPS_PREFIX
+					--disable-crypttests --disable-examples
 					--enable-keygen --enable-rsapss --enable-aesccm
 					--enable-aesctr --enable-des3 --enable-camellia
-					--enable-curve25519 --enable-ed25519"
+					--enable-curve25519 --enable-ed25519
+					--enable-curve448 --enable-ed448
+					--enable-sha3 --enable-shake256 --enable-ecccustcurves"
 
 	git clone https://github.com/wolfSSL/wolfssl.git $WOLFSSL_DIR &&
 	cd $WOLFSSL_DIR &&
@@ -65,7 +68,7 @@ build_wolfssl()
 
 build_tss2()
 {
-	TSS2_REV=2.3.3
+	TSS2_REV=2.4.3
 	TSS2_PKG=tpm2-tss-$TSS2_REV
 	TSS2_DIR=$DEPS_BUILD_DIR/$TSS2_PKG
 	TSS2_SRC=https://github.com/tpm2-software/tpm2-tss/releases/download/$TSS2_REV/$TSS2_PKG.tar.gz
@@ -85,8 +88,8 @@ build_tss2()
 	cd -
 }
 
-: ${TRAVIS_BUILD_DIR=$PWD}
-: ${DEPS_BUILD_DIR=$TRAVIS_BUILD_DIR/..}
+: ${BUILD_DIR=$PWD}
+: ${DEPS_BUILD_DIR=$BUILD_DIR/..}
 : ${DEPS_PREFIX=/usr/local}
 
 TARGET=check
@@ -113,12 +116,8 @@ gcrypt)
 botan)
 	CONFIG="--disable-defaults --enable-pki --enable-botan --enable-pem"
 	export TESTS_PLUGINS="test-vectors pem botan!"
-	# we can't use the old package that comes with Ubuntu so we build from
-	# the current master until 2.8.0 is released and then probably switch to
-	# that unless we need newer features (at least 2.7.0 plus PKCS#1 patch is
-	# currently required)
 	DEPS=""
-	if test "$1" = "deps"; then
+	if test "$1" = "build-deps"; then
 		build_botan
 	fi
 	;;
@@ -127,7 +126,7 @@ wolfssl)
 	export TESTS_PLUGINS="test-vectors pem wolfssl!"
 	# build with custom options to enable all the features the plugin supports
 	DEPS=""
-	if test "$1" = "deps"; then
+	if test "$1" = "build-deps"; then
 		build_wolfssl
 	fi
 	;;
@@ -141,25 +140,30 @@ all|coverage|sonarcloud)
 			--disable-osx-attr --disable-tkm --disable-uci
 			--disable-unwind-backtraces
 			--disable-svc --disable-dbghelp-backtraces --disable-socket-win
-			--disable-kernel-wfp --disable-kernel-iph --disable-winhttp"
+			--disable-kernel-wfp --disable-kernel-iph --disable-winhttp
+			--disable-python-eggs-install"
 	# not enabled on the build server
 	CONFIG="$CONFIG --disable-af-alg"
-	if test "$TRAVIS_CPU_ARCH" != "amd64"; then
-		CONFIG="$CONFIG --disable-aesni --disable-rdrand"
-	fi
 	if test "$TEST" != "coverage"; then
 		CONFIG="$CONFIG --disable-coverage"
 	else
 		# not actually required but configure checks for it
 		DEPS="$DEPS lcov"
 	fi
+	# Botan requires newer compilers, so disable it on Ubuntu 16.04
+	if test -n "$UBUNTU_XENIAL"; then
+		CONFIG="$CONFIG --disable-botan"
+	fi
 	DEPS="$DEPS libcurl4-gnutls-dev libsoup2.4-dev libunbound-dev libldns-dev
 		  libmysqlclient-dev libsqlite3-dev clearsilver-dev libfcgi-dev
-		  libpcsclite-dev libpam0g-dev binutils-dev libnm-dev libgcrypt20-dev
-		  libjson-c-dev iptables-dev python-pip libtspi-dev libsystemd-dev"
+		  libldap2-dev libpcsclite-dev libpam0g-dev binutils-dev libnm-dev
+		  libgcrypt20-dev libjson-c-dev iptables-dev python-pip libtspi-dev
+		  libsystemd-dev"
 	PYDEPS="tox"
-	if test "$1" = "deps"; then
-		build_botan
+	if test "$1" = "build-deps"; then
+		if test -z "$UBUNTU_XENIAL"; then
+			build_botan
+		fi
 		build_wolfssl
 		build_tss2
 	fi
@@ -170,7 +174,7 @@ win*)
 			--enable-constraints --enable-revocation --enable-pem --enable-pkcs1
 			--enable-pkcs8 --enable-x509 --enable-pubkey --enable-acert
 			--enable-eap-tnc --enable-eap-ttls --enable-eap-identity
-			--enable-updown --enable-ext-auth --enable-libipsec
+			--enable-updown --enable-ext-auth --enable-libipsec --enable-pkcs11
 			--enable-tnccs-20 --enable-imc-attestation --enable-imv-attestation
 			--enable-imc-os --enable-imv-os --enable-tnc-imv --enable-tnc-imc
 			--enable-pki --enable-swanctl --enable-socket-win
@@ -178,11 +182,10 @@ win*)
 	# no make check for Windows binaries unless we run on a windows host
 	if test "$APPVEYOR" != "True"; then
 		TARGET=
-		CCACHE=ccache
 	else
 		CONFIG="$CONFIG --enable-openssl"
-		CFLAGS="$CFLAGS -I/c/OpenSSL-$TEST/include"
-		LDFLAGS="-L/c/OpenSSL-$TEST"
+		CFLAGS="$CFLAGS -I$OPENSSL_DIR/include"
+		LDFLAGS="-L$OPENSSL_DIR"
 		export LDFLAGS
 	fi
 	CFLAGS="$CFLAGS -mno-ms-bitfields"
@@ -191,30 +194,37 @@ win*)
 	win64)
 		CONFIG="--host=x86_64-w64-mingw32 $CONFIG --enable-dbghelp-backtraces"
 		DEPS="gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 mingw-w64-x86-64-dev $DEPS"
-		CC="$CCACHE x86_64-w64-mingw32-gcc"
+		CC="x86_64-w64-mingw32-gcc"
 		;;
 	win32)
 		CONFIG="--host=i686-w64-mingw32 $CONFIG"
 		DEPS="gcc-mingw-w64-i686 binutils-mingw-w64-i686 mingw-w64-i686-dev $DEPS"
-		CC="$CCACHE i686-w64-mingw32-gcc"
+		CC="i686-w64-mingw32-gcc"
 		;;
 	esac
 	;;
-osx)
+android)
+	if test "$1" = "deps"; then
+		git clone git://git.strongswan.org/android-ndk-boringssl.git -b ndk-static \
+			src/frontends/android/app/src/main/jni/openssl
+	fi
+	TARGET=distdir
+	;;
+macos)
 	# this causes a false positive in ip-packet.c since Xcode 8.3
 	CFLAGS="$CFLAGS -Wno-address-of-packed-member"
 	# use the same options as in the Homebrew Formula
 	CONFIG="--disable-defaults --enable-charon --enable-cmd --enable-constraints
 			--enable-curl --enable-eap-gtc --enable-eap-identity
-			--enable-eap-md5 --enable-eap-mschapv2 --enable-ikev1 --enable-ikev2
-			--enable-kernel-libipsec --enable-kernel-pfkey
+			--enable-eap-md5 --enable-eap-mschapv2 --enable-farp --enable-ikev1
+			--enable-ikev2 --enable-kernel-libipsec --enable-kernel-pfkey
 			--enable-kernel-pfroute --enable-nonce --enable-openssl
 			--enable-osx-attr --enable-pem --enable-pgp --enable-pkcs1
 			--enable-pkcs8 --enable-pki --enable-pubkey --enable-revocation
 			--enable-scepclient --enable-socket-default --enable-sshkey
 			--enable-stroke --enable-swanctl --enable-unity --enable-updown
 			--enable-x509 --enable-xauth-generic"
-	DEPS="bison gettext openssl curl"
+	DEPS="automake autoconf libtool bison gettext openssl curl"
 	BREW_PREFIX=$(brew --prefix)
 	export PATH=$BREW_PREFIX/opt/bison/bin:$PATH
 	export ACLOCAL_PATH=$BREW_PREFIX/opt/gettext/share/aclocal:$ACLOCAL_PATH
@@ -241,10 +251,11 @@ freebsd)
 			--enable-eap-radius --enable-eap-sim --enable-eap-sim-file
 			--enable-gcm --enable-ipseckey --enable-kernel-libipsec
 			--enable-load-tester --enable-ldap --enable-mediation
-			--enable-mysql --enable-sqlite --enable-tpm	--enable-unbound
-			--enable-unity --enable-xauth-eap --enable-xauth-pam
-			--with-printf-hooks=builtin --enable-attr-sql --enable-sql"
-	DEPS="gmp openldap-client libxml2 mysql80-client sqlite3 unbound ldns"
+			--enable-mysql --enable-sqlite --enable-tpm --enable-tss-tss2
+			--enable-unbound --enable-unity --enable-xauth-eap --enable-xauth-pam
+			--with-printf-hooks=builtin --enable-attr-sql --enable-sql
+			--enable-farp"
+	DEPS="git gmp openldap-client libxml2 mysql80-client sqlite3 unbound ldns tpm2-tss"
 	export GPERF=/usr/local/bin/gperf
 	export LEX=/usr/local/bin/flex
 	;;
@@ -258,7 +269,7 @@ fuzzing)
 	if test -z "$1"; then
 		if test -z "$FUZZING_CORPORA"; then
 			git clone --depth 1 https://github.com/strongswan/fuzzing-corpora.git fuzzing-corpora
-			export FUZZING_CORPORA=$TRAVIS_BUILD_DIR/fuzzing-corpora
+			export FUZZING_CORPORA=$BUILD_DIR/fuzzing-corpora
 		fi
 		# these are about the same as those on OSS-Fuzz (except for the
 		# symbolize options and strip_path_prefix)
@@ -293,32 +304,28 @@ lgtm)
 	DEPS="jq"
 
 	if test -z "$1"; then
-		# fall back to the parent of the latest commit (on new branches we might
-		# not have a range, also on duplicate branches)
-		base="${TRAVIS_COMMIT}^"
-		if test -n "$TRAVIS_COMMIT_RANGE"; then
-			base="${TRAVIS_COMMIT_RANGE%...*}"
-			# after rebases, the first commit ID in the range might not be valid
-			git rev-parse -q --verify $base
-			if [ $? != 0 ]; then
-				# this will always compare against master, while the range
-				# otherwise only contains "new" commits
-				base=$(git merge-base origin/master ${TRAVIS_COMMIT})
-			fi
+		base=$COMMIT_BASE
+		# after rebases or for new/duplicate branches, the passed base commit
+		# ID might not be valid
+		git rev-parse -q --verify $base^{commit}
+		if [ $? != 0 ]; then
+			# this will always compare against master, while via base we
+			# otherwise only contains "new" commits
+			base=$(git merge-base origin/master ${COMMIT_ID})
 		fi
 		base=$(git rev-parse $base)
 		project_id=1506185006272
 
-		echo "Starting code review for $TRAVIS_COMMIT (base $base) on lgtm.com"
+		echo "Starting code review for $COMMIT_ID (base $base) on lgtm.com"
 		git diff --binary $base > lgtm.patch || exit $?
 		curl -s -X POST --data-binary @lgtm.patch \
-			"https://lgtm.com/api/v1.0/codereviews/${project_id}?base=${base}&external-id=${TRAVIS_BUILD_NUMBER}" \
+			"https://lgtm.com/api/v1.0/codereviews/${project_id}?base=${base}&external-id=${BUILD_NUMBER}" \
 			-H 'Content-Type: application/octet-stream' \
 			-H 'Accept: application/json' \
 			-H "Authorization: Bearer ${LGTM_TOKEN}" > lgtm.res || exit $?
 		lgtm_check_url=$(jq -r '."task-result-url"' lgtm.res)
-		if [ "$lgtm_check_url" = "null" ]; then
-			cat lgtm.res | jq
+		if [ -z "$lgtm_check_url" -o "$lgtm_check_url" = "null" ]; then
+			cat lgtm.res
 			exit 1
 		fi
 		lgtm_url=$(jq -r '."task-result"."results-url"' lgtm.res)
@@ -358,13 +365,14 @@ lgtm)
 	;;
 esac
 
-if test "$1" = "deps"; then
-	case "$TRAVIS_OS_NAME" in
+case "$1" in
+deps)
+	case "$OS_NAME" in
 	linux)
 		sudo apt-get update -qq && \
 		sudo apt-get install -qq bison flex gperf gettext $DEPS
 		;;
-	osx)
+	macos)
 		brew update && \
 		brew install $DEPS
 		;;
@@ -374,12 +382,17 @@ if test "$1" = "deps"; then
 		;;
 	esac
 	exit $?
-fi
-
-if test "$1" = "pydeps"; then
+	;;
+pydeps)
 	test -z "$PYDEPS" || pip -q install --user $PYDEPS
 	exit $?
-fi
+	;;
+build-deps)
+	exit
+	;;
+*)
+	;;
+esac
 
 CONFIG="$CONFIG
 	--disable-dependency-tracking
@@ -404,12 +417,6 @@ esac
 echo "$ make $TARGET"
 case "$TEST" in
 sonarcloud)
-	# there is an issue with the platform detection that causes sonarqube to
-	# fail on bionic with "ERROR: ld.so: object '...libinterceptor-${PLATFORM}.so'
-	# from LD_PRELOAD cannot be preloaded (cannot open shared object file)"
-	# https://jira.sonarsource.com/browse/CPP-2027
-	BW_PATH=$(dirname $(which build-wrapper-linux-x86-64))
-	cp $BW_PATH/libinterceptor-x86_64.so $BW_PATH/libinterceptor-haswell.so
 	# without target, coverage is currently not supported anyway because
 	# sonarqube only supports gcov, not lcov
 	build-wrapper-linux-x86-64 --out-dir bw-output make -j4 || exit $?
@@ -429,14 +436,23 @@ apidoc)
 	;;
 sonarcloud)
 	sonar-scanner \
-		-Dsonar.projectKey=strongswan \
-		-Dsonar.projectVersion=$(git describe)+${TRAVIS_BUILD_NUMBER} \
+		-Dsonar.host.url=https://sonarcloud.io \
+		-Dsonar.projectKey=${SONAR_PROJECT} \
+		-Dsonar.organization=${SONAR_ORGANIZATION} \
+		-Dsonar.login=${SONAR_TOKEN} \
+		-Dsonar.projectVersion=$(git describe)+${BUILD_NUMBER} \
 		-Dsonar.sources=. \
 		-Dsonar.cfamily.threads=2 \
 		-Dsonar.cfamily.cache.enabled=true \
 		-Dsonar.cfamily.cache.path=$HOME/.sonar-cache \
 		-Dsonar.cfamily.build-wrapper-output=bw-output || exit $?
 	rm -r bw-output .scannerwork
+	;;
+android)
+	rm -r strongswan-*
+	cd src/frontends/android
+	echo "$ ./gradlew build"
+	NDK_CCACHE=ccache ./gradlew build || exit $?
 	;;
 *)
 	;;

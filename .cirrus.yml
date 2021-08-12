@@ -1,12 +1,12 @@
 freebsd_instance:
-  image: freebsd-12-1-release-amd64
+  image_family: freebsd-12-2
 
 env:
   TESTS_REDUCED_KEYLENGTHS: yes
   LEAK_DETECTIVE: no
   MONOLITHIC: no
   TEST: freebsd
-  TRAVIS_OS_NAME: freebsd
+  OS_NAME: freebsd
 
 task:
   install_script: ./scripts/test.sh deps

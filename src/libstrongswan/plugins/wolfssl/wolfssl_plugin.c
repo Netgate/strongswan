@@ -194,32 +194,41 @@ METHOD(plugin_t, get_features, int,
 #ifdef HAVE_ECC_DHE
 		/* EC DH groups */
 		PLUGIN_REGISTER(DH, wolfssl_ec_diffie_hellman_create),
-	#if !defined(NO_ECC256) || defined(HAVE_ALL_CURVES)
+	#if (!defined(NO_ECC256) || defined(HAVE_ALL_CURVES)) && \
+		(!defined(ECC_MIN_KEY_SZ) || ECC_MIN_KEY_SZ <= 256)
 			PLUGIN_PROVIDE(DH, ECP_256_BIT),
 	#endif
-	#if defined(HAVE_ECC384) || defined(HAVE_ALL_CURVES)
+	#if (defined(HAVE_ECC384) || defined(HAVE_ALL_CURVES)) && \
+		(!defined(ECC_MIN_KEY_SZ) || ECC_MIN_KEY_SZ <= 384)
 			PLUGIN_PROVIDE(DH, ECP_384_BIT),
 	#endif
-	#if defined(HAVE_ECC521) || defined(HAVE_ALL_CURVES)
+	#if (defined(HAVE_ECC521) || defined(HAVE_ALL_CURVES)) && \
+		(!defined(ECC_MIN_KEY_SZ) || ECC_MIN_KEY_SZ <= 521)
 			PLUGIN_PROVIDE(DH, ECP_521_BIT),
 	#endif
-	#if defined(HAVE_ECC224) || defined(HAVE_ALL_CURVES)
+	#if (defined(HAVE_ECC224) || defined(HAVE_ALL_CURVES)) && \
+		 (!defined(ECC_MIN_KEY_SZ) || ECC_MIN_KEY_SZ <= 224)
 			PLUGIN_PROVIDE(DH, ECP_224_BIT),
 	#endif
-	#if defined(HAVE_ECC192) || defined(HAVE_ALL_CURVES)
+	#if (defined(HAVE_ECC192) || defined(HAVE_ALL_CURVES)) && \
+		 (!defined(ECC_MIN_KEY_SZ) || ECC_MIN_KEY_SZ <= 192)
 			PLUGIN_PROVIDE(DH, ECP_192_BIT),
 	#endif
-	#ifdef HAVE_BRAINPOOL
-		#if !define(NO_ECC256) || defined(HAVE_ALL_CURVES)
+	#ifdef HAVE_ECC_BRAINPOOL
+		#if (!defined(NO_ECC256) || defined(HAVE_ALL_CURVES)) && \
+			(!defined(ECC_MIN_KEY_SZ) || ECC_MIN_KEY_SZ <= 256)
 			PLUGIN_PROVIDE(DH, ECP_256_BP),
 		#endif
-		#if defined(HAVE_ECC384) || defined(HAVE_ALL_CURVES)
+		#if (defined(HAVE_ECC384) || defined(HAVE_ALL_CURVES))  && \
+			(!defined(ECC_MIN_KEY_SZ) || ECC_MIN_KEY_SZ <= 384)
 			PLUGIN_PROVIDE(DH, ECP_384_BP),
 		#endif
-		#if defined(HAVE_ECC512) || defined(HAVE_ALL_CURVES)
+		#if (defined(HAVE_ECC512) || defined(HAVE_ALL_CURVES)) && \
+			(!defined(ECC_MIN_KEY_SZ) || ECC_MIN_KEY_SZ <= 512)
 			PLUGIN_PROVIDE(DH, ECP_512_BP),
 		#endif
-		#if defined(HAVE_ECC224) || defined(HAVE_ALL_CURVES)
+		#if (defined(HAVE_ECC224) || defined(HAVE_ALL_CURVES)) && \
+			(!defined(ECC_MIN_KEY_SZ) || ECC_MIN_KEY_SZ <= 224)
 			PLUGIN_PROVIDE(DH, ECP_224_BP),
 		#endif
 	#endif
@@ -377,28 +386,54 @@ METHOD(plugin_t, get_features, int,
 		#endif
 	#endif /* HAVE_ECC_VERIFY */
 #endif /* HAVE_ECC */
-#ifdef HAVE_CURVE25519
+#if defined (HAVE_CURVE25519) || defined(HAVE_CURVE448)
 		PLUGIN_REGISTER(DH, wolfssl_x_diffie_hellman_create),
+	#ifdef HAVE_CURVE25519
 			PLUGIN_PROVIDE(DH, CURVE_25519),
-#endif
-#ifdef HAVE_ED25519
+	#endif
+	#ifdef HAVE_CURVE448
+			PLUGIN_PROVIDE(DH, CURVE_448),
+	#endif
+#endif /* HAVE_CURVE25519 || HAVE_CURVE448 */
+#if defined(HAVE_ED25519) || defined(HAVE_ED448)
 		/* EdDSA private/public key loading */
 		PLUGIN_REGISTER(PUBKEY, wolfssl_ed_public_key_load, TRUE),
+	#ifdef HAVE_ED25519
 			PLUGIN_PROVIDE(PUBKEY, KEY_ED25519),
+	#endif
+	#ifdef HAVE_ED448
+			PLUGIN_PROVIDE(PUBKEY, KEY_ED448),
+	#endif
 		PLUGIN_REGISTER(PRIVKEY, wolfssl_ed_private_key_load, TRUE),
+	#ifdef HAVE_ED25519
 			PLUGIN_PROVIDE(PRIVKEY, KEY_ED25519),
+	#endif
+	#ifdef HAVE_ED448
+			PLUGIN_PROVIDE(PRIVKEY, KEY_ED448),
+	#endif
 		PLUGIN_REGISTER(PRIVKEY_GEN, wolfssl_ed_private_key_gen, FALSE),
+	#ifdef HAVE_ED25519
 			PLUGIN_PROVIDE(PRIVKEY_GEN, KEY_ED25519),
+	#endif
+	#ifdef HAVE_ED448
+			PLUGIN_PROVIDE(PRIVKEY_GEN, KEY_ED448),
+	#endif
 	#ifdef HAVE_ED25519_SIGN
 		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_ED25519),
 	#endif
 	#ifdef HAVE_ED25519_VERIFY
 		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_ED25519),
 	#endif
+	#ifdef HAVE_ED448_SIGN
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_ED448),
+	#endif
+	#ifdef HAVE_ED448_VERIFY
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_ED448),
+	#endif
 		/* register a pro forma identity hasher, never instantiated */
 		PLUGIN_REGISTER(HASHER, return_null),
 			PLUGIN_PROVIDE(HASHER, HASH_IDENTITY),
-#endif /* HAVE_ED25519 */
+#endif /* HAVE_ED25519 || HAVE_ED448 */
 #ifndef WC_NO_RNG
 		/* generic key loader */
 		PLUGIN_REGISTER(RNG, wolfssl_rng_create),

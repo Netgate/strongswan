@@ -104,6 +104,12 @@ struct private_task_manager_t {
 		u_int retransmitted;
 
 		/**
+		 * TRUE if any retransmits have been sent for this message (counter is
+		 * reset if deferred)
+		 */
+		bool retransmit_sent;
+
+		/**
 		 * packet(s) for retransmission
 		 */
 		array_t *packets;
@@ -149,6 +155,14 @@ struct private_task_manager_t {
 	 * Number of times we retransmit messages before giving up
 	 */
 	u_int retransmit_tries;
+
+	/**
+	 * Maximum number of tries possible with current retransmission settings
+	 * before overflowing the range of uint32_t, which we use for the timeout.
+	 * Note that UINT32_MAX milliseconds equal nearly 50 days, so that doesn't
+	 * make much sense without retransmit_limit anyway.
+	 */
+	u_int retransmit_tries_max;
 
 	/**
 	 * Retransmission timeout
@@ -331,7 +345,7 @@ METHOD(task_manager_t, retransmit, status_t,
 	if (message_id == this->initiating.mid &&
 		array_count(this->initiating.packets))
 	{
-		uint32_t timeout, max_jitter;
+		uint32_t timeout = UINT32_MAX, max_jitter;
 		job_t *job;
 		enumerator_t *enumerator;
 		packet_t *packet;
@@ -357,22 +371,7 @@ METHOD(task_manager_t, retransmit, status_t,
 
 		if (!mobike || !mobike->is_probing(mobike))
 		{
-			if (this->initiating.retransmitted <= this->retransmit_tries)
-			{
-				timeout = (uint32_t)(this->retransmit_timeout * 1000.0 *
-					pow(this->retransmit_base, this->initiating.retransmitted));
-
-				if (this->retransmit_limit)
-				{
-					timeout = min(timeout, this->retransmit_limit);
-				}
-				if (this->retransmit_jitter)
-				{
-					max_jitter = (timeout / 100.0) * this->retransmit_jitter;
-					timeout -= max_jitter * (random() / (RAND_MAX + 1.0));
-				}
-			}
-			else
+			if (this->initiating.retransmitted > this->retransmit_tries)
 			{
 				DBG1(DBG_IKE, "giving up after %d retransmits",
 					 this->initiating.retransmitted - 1);
@@ -380,13 +379,28 @@ METHOD(task_manager_t, retransmit, status_t,
 								   packet);
 				return DESTROY_ME;
 			}
-
+			if (!this->retransmit_tries_max ||
+				this->initiating.retransmitted <= this->retransmit_tries_max)
+			{
+				timeout = (uint32_t)(this->retransmit_timeout * 1000.0 *
+					pow(this->retransmit_base, this->initiating.retransmitted));
+			}
+			if (this->retransmit_limit)
+			{
+				timeout = min(timeout, this->retransmit_limit);
+			}
+			if (this->retransmit_jitter)
+			{
+				max_jitter = (timeout / 100.0) * this->retransmit_jitter;
+				timeout -= max_jitter * (random() / (RAND_MAX + 1.0));
+			}
 			if (this->initiating.retransmitted)
 			{
 				DBG1(DBG_IKE, "retransmit %d of request with message ID %d",
 					 this->initiating.retransmitted, message_id);
 				charon->bus->alert(charon->bus, ALERT_RETRANSMIT_SEND, packet,
 								   this->initiating.retransmitted);
+				this->initiating.retransmit_sent = TRUE;
 			}
 			if (!mobike)
 			{
@@ -402,7 +416,7 @@ METHOD(task_manager_t, retransmit, status_t,
 						 "deferred");
 					this->ike_sa->set_condition(this->ike_sa, COND_STALE, TRUE);
 					this->initiating.deferred = TRUE;
-					return SUCCESS;
+					return INVALID_STATE;
 				}
 				else if (mobike->is_probing(mobike))
 				{
@@ -436,7 +450,7 @@ METHOD(task_manager_t, retransmit, status_t,
 					 "deferred");
 				this->ike_sa->set_condition(this->ike_sa, COND_STALE, TRUE);
 				this->initiating.deferred = TRUE;
-				return SUCCESS;
+				return INVALID_STATE;
 			}
 		}
 
@@ -444,8 +458,9 @@ METHOD(task_manager_t, retransmit, status_t,
 		job = (job_t*)retransmit_job_create(this->initiating.mid,
 											this->ike_sa->get_id(this->ike_sa));
 		lib->scheduler->schedule_job_ms(lib->scheduler, job, timeout);
+		return SUCCESS;
 	}
-	return SUCCESS;
+	return INVALID_STATE;
 }
 
 METHOD(task_manager_t, initiate, status_t,
@@ -627,6 +642,7 @@ METHOD(task_manager_t, initiate, status_t,
 	message->set_exchange_type(message, exchange);
 	this->initiating.type = exchange;
 	this->initiating.retransmitted = 0;
+	this->initiating.retransmit_sent = FALSE;
 	this->initiating.deferred = FALSE;
 
 	enumerator = array_create_enumerator(this->active_tasks);
@@ -747,7 +763,7 @@ static status_t process_response(private_task_manager_t *this,
 	}
 	enumerator->destroy(enumerator);
 
-	if (this->initiating.retransmitted > 1)
+	if (this->initiating.retransmit_sent)
 	{
 		packet_t *packet = NULL;
 		array_get(this->initiating.packets, 0, &packet);
@@ -1265,7 +1281,7 @@ METHOD(task_manager_t, get_mid, uint32_t,
  * Handle the given IKE fragment, if it is one.
  *
  * Returns SUCCESS if the message is not a fragment, and NEED_MORE if it was
- * handled properly.  Error states are  returned if the fragment was invalid or
+ * handled properly.  Error states are returned if the fragment was invalid or
  * the reassembled message could not have been processed properly.
  */
 static status_t handle_fragment(private_task_manager_t *this,
@@ -1274,6 +1290,12 @@ static status_t handle_fragment(private_task_manager_t *this,
 	message_t *reassembled;
 	status_t status;
 
+	if (*defrag && (*defrag)->get_message_id(*defrag) < msg->get_message_id(msg))
+	{
+		/* clear fragments of an incompletely received retransmitted message */
+		(*defrag)->destroy(*defrag);
+		*defrag = NULL;
+	}
 	if (!msg->get_payload(msg, PLV2_FRAGMENT))
 	{
 		return SUCCESS;
@@ -1627,8 +1649,10 @@ METHOD(task_manager_t, process_message, status_t,
 				return FAILED;
 			}
 			if (!this->ike_sa->supports_extension(this->ike_sa, EXT_MOBIKE))
-			{	/* with MOBIKE, we do no implicit updates */
-				this->ike_sa->update_hosts(this->ike_sa, me, other, mid == 1);
+			{	/* only do implicit updates without MOBIKE, and only force
+				 * updates for IKE_AUTH (ports might change due to NAT-T) */
+				this->ike_sa->update_hosts(this->ike_sa, me, other,
+										   mid == 1 ? UPDATE_HOSTS_FORCE_ADDRS : 0);
 			}
 			status = handle_fragment(this, &this->responding.defrag, msg);
 			if (status != SUCCESS)
@@ -1696,11 +1720,11 @@ METHOD(task_manager_t, process_message, status_t,
 				msg->get_exchange_type(msg) != IKE_SA_INIT)
 			{	/* only do updates based on verified messages (or initial ones) */
 				if (!this->ike_sa->supports_extension(this->ike_sa, EXT_MOBIKE))
-				{	/* with MOBIKE, we do no implicit updates.  we force an
-					 * update of the local address on IKE_SA_INIT, but never
-					 * for the remote address */
-					this->ike_sa->update_hosts(this->ike_sa, me, NULL, mid == 0);
-					this->ike_sa->update_hosts(this->ike_sa, NULL, other, FALSE);
+				{	/* only do implicit updates without MOBIKE, we force an
+					 * update of the local address on IKE_SA_INIT as we might
+					 * not know it yet, but never for the remote address */
+					this->ike_sa->update_hosts(this->ike_sa, me, other,
+											   mid == 0 ? UPDATE_HOSTS_FORCE_LOCAL : 0);
 				}
 			}
 			status = handle_fragment(this, &this->initiating.defrag, msg);
@@ -1881,7 +1905,7 @@ static void trigger_mbb_reauth(private_task_manager_t *this)
 	queued_task_t *queued;
 	bool children = FALSE;
 
-	new = charon->ike_sa_manager->checkout_new(charon->ike_sa_manager,
+	new = charon->ike_sa_manager->create_new(charon->ike_sa_manager,
 								this->ike_sa->get_version(this->ike_sa), TRUE);
 	if (!new)
 	{	/* shouldn't happen */
@@ -2346,5 +2370,11 @@ task_manager_v2_t *task_manager_v2_create(ike_sa_t *ike_sa)
 					"%s.make_before_break", FALSE, lib->ns),
 	);
 
+	if (this->retransmit_base > 1)
+	{	/* based on 1000 * timeout * base^try */
+		this->retransmit_tries_max = log(UINT32_MAX/
+										 (1000.0 * this->retransmit_timeout))/
+									 log(this->retransmit_base);
+	}
 	return &this->public;
 }

@@ -349,6 +349,7 @@ ARG_ENABL_SET([tss-tss2],       [enable the use of the TSS 2.0 Trusted Software 
 
 # compile options
 ARG_ENABL_SET([coverage],       [enable lcov coverage report generation.])
+ARG_ENABL_SET([git-version],    [use output of 'git describe' as version information in executables.])
 ARG_ENABL_SET([leak-detective], [enable malloc hooks to find memory leaks.])
 ARG_ENABL_SET([lock-profiler],  [enable lock/mutex profiling code.])
 ARG_ENABL_SET([log-thread-ids], [use thread ID, if available, instead of an incremented value starting from 1, to identify threads.])
@@ -684,7 +685,7 @@ AC_CHECK_FUNC(
 	]
 )
 
-AC_CHECK_FUNCS(prctl mallinfo getpass closefrom getpwnam_r getgrnam_r getpwuid_r)
+AC_CHECK_FUNCS(prctl mallinfo getpass closefrom getpwnam_r getgrnam_r getpwuid_r chown)
 AC_CHECK_FUNCS(fmemopen funopen mmap memrchr setlinebuf strptime dirfd sigwaitinfo explicit_bzero)
 
 AC_CHECK_FUNC([syslog], [
@@ -1082,7 +1083,7 @@ if test x$tss_tss2 = xtrue; then
 	fi
 fi
 
-if test x$imc_swima = xtrue -o $imv_swima = xtrue; then
+if test x$imc_swima = xtrue -o x$imv_swima = xtrue; then
 	PKG_CHECK_MODULES(json, [json-c], [],
 		[PKG_CHECK_MODULES(json, [json])])
 	AC_SUBST(json_CFLAGS)
@@ -1195,9 +1196,14 @@ if test x$gcrypt = xtrue; then
 fi
 
 if test x$botan = xtrue; then
-	PKG_CHECK_MODULES(botan, [botan-2])
+	PKG_CHECK_MODULES(botan, [botan-3], [],
+		[PKG_CHECK_MODULES(botan, [botan-2])])
 	AC_SUBST(botan_CFLAGS)
 	AC_SUBST(botan_LIBS)
+	saved_LIBS=$LIBS
+	LIBS="$botan_LIBS"
+	AC_CHECK_FUNCS(botan_rng_init_custom)
+	LIBS=$saved_LIBS
 fi
 
 if test x$uci = xtrue; then
@@ -1405,6 +1411,25 @@ if test "x$ss_cv_static_plugin_constructors" = xyes; then
 	if test "$PYTHON" = ":"; then
 		AC_MSG_FAILURE([Python is required to resolve plugin constructors statically])
 	fi
+fi
+
+AC_MSG_CHECKING([version from Git repository])
+AC_SUBST(GIT_VERSION, [$($srcdir/scripts/git-version "$srcdir")])
+case "$GIT_VERSION" in
+	"$PACKAGE_VERSION"*)
+		AC_MSG_RESULT([$GIT_VERSION])
+		;;
+	UNKNOWN)
+		AC_MSG_RESULT([$GIT_VERSION (could be due to insufficient clone depth)])
+		;;
+	*)
+		AC_MSG_RESULT([$GIT_VERSION])
+#		AC_MSG_ERROR([$PACKAGE_VERSION is not a prefix of $GIT_VERSION, tag missing?])
+		;;
+esac
+
+if test x$git_version = xtrue -a "$GIT_VERSION" != "UNKNOWN"; then
+	AC_DEFINE_UNQUOTED(VERSION, ["$GIT_VERSION"])
 fi
 
 # ===============================================

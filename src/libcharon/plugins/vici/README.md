@@ -483,7 +483,7 @@ Load a certificate into the daemon.
 Load a private key into the daemon.
 
 	{
-		type = <private key type, rsa|ecdsa|bliss|any>
+		type = <private key type, rsa|ecdsa|ed25519|ed448|bliss|any>
 		data = <PEM or DER encoded key data>
 	} => {
 		success = <yes or no>
@@ -973,6 +973,22 @@ The _ike-rekey_ event is issued when an IKE_SA is rekeyed.
 			new = {
 				<same data as in the list-sas event, but without child-sas section>
 			}
+		}
+	}
+
+### ike-update ###
+
+The _ike-update_ event is issued when the local or remote endpoint address of an
+IKE_SA is about to change (at least one address/port is different).
+
+	{
+		local-host = <new/current local IKE endpoint address>
+		local-port = <new/current local IKE endpoint port>
+		remote-host = <new/current remote IKE endpoint address>
+		remote-port = <new/current remote IKE endpoint port>
+		<IKE_SA config name> = {
+			<same data as in the list-sas event, but without child-sas section
+			 and listing the old addresses/ports>
 		}
 	}
 

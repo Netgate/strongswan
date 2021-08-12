@@ -330,12 +330,12 @@ struct private_kernel_netlink_net_t {
 	/**
 	 * Map for IP addresses to iface_entry_t objects (addr_map_entry_t)
 	 */
-	hashtable_t *addrs;
+	hashlist_t *addrs;
 
 	/**
 	 * Map for virtual IP addresses to iface_entry_t objects (addr_map_entry_t)
 	 */
-	hashtable_t *vips;
+	hashlist_t *vips;
 
 	/**
 	 * netlink rt socket (routing)
@@ -375,7 +375,7 @@ struct private_kernel_netlink_net_t {
 	/**
 	 * installed routes
 	 */
-	hashtable_t *routes;
+	hashlist_t *routes;
 
 	/**
 	 * mutex for routes
@@ -499,7 +499,7 @@ static job_requeue_t reinstall_routes(private_kernel_netlink_net_t *this)
 	this->net_changes_lock->lock(this->net_changes_lock);
 	this->routes_lock->lock(this->routes_lock);
 
-	enumerator = this->routes->create_enumerator(this->routes);
+	enumerator = this->routes->ht.create_enumerator(&this->routes->ht);
 	while (enumerator->enumerate(enumerator, NULL, (void**)&route))
 	{
 		net_change_t *change, lookup = {
@@ -617,7 +617,7 @@ static bool is_known_vip(private_kernel_netlink_net_t *this, host_t *ip)
 /**
  * Add an address map entry
  */
-static void addr_map_entry_add(hashtable_t *map, addr_entry_t *addr,
+static void addr_map_entry_add(hashlist_t *map, addr_entry_t *addr,
 							   iface_entry_t *iface)
 {
 	addr_map_entry_t *entry;
@@ -627,14 +627,14 @@ static void addr_map_entry_add(hashtable_t *map, addr_entry_t *addr,
 		.addr = addr,
 		.iface = iface,
 	);
-	entry = map->put(map, entry, entry);
+	entry = map->ht.put(&map->ht, entry, entry);
 	free(entry);
 }
 
 /**
  * Remove an address map entry
  */
-static void addr_map_entry_remove(hashtable_t *map, addr_entry_t *addr,
+static void addr_map_entry_remove(hashlist_t *map, addr_entry_t *addr,
 								  iface_entry_t *iface)
 {
 	addr_map_entry_t *entry, lookup = {
@@ -643,7 +643,7 @@ static void addr_map_entry_remove(hashtable_t *map, addr_entry_t *addr,
 		.iface = iface,
 	};
 
-	entry = map->remove(map, &lookup);
+	entry = map->ht.remove(&map->ht, &lookup);
 	free(entry);
 }
 
@@ -942,8 +942,9 @@ static host_t *get_matching_address(private_kernel_netlink_net_t *this,
 				{	/* optionally match a subnet */
 					continue;
 				}
-				if (candidate && candidate->ip_equals(candidate, addr->ip))
-				{	/* stop if we find the candidate */
+				if (candidate && candidate->ip_equals(candidate, addr->ip) &&
+					!(addr->flags & IFA_F_DEPRECATED))
+				{	/* stop if we find the candidate and it's not deprecated */
 					best = addr;
 					candidate_matched = TRUE;
 					break;
@@ -1241,7 +1242,7 @@ static void process_addr(private_kernel_netlink_net_t *this,
 		};
 		addr_entry_t *addr;
 
-		entry = this->vips->get(this->vips, &lookup);
+		entry = this->vips->ht.get(&this->vips->ht, &lookup);
 		if (entry)
 		{
 			if (hdr->nlmsg_type == RTM_NEWADDR)
@@ -1261,7 +1262,7 @@ static void process_addr(private_kernel_netlink_net_t *this,
 			host->destroy(host);
 			return;
 		}
-		entry = this->addrs->get(this->addrs, &lookup);
+		entry = this->addrs->ht.get(&this->addrs->ht, &lookup);
 		if (entry)
 		{
 			if (hdr->nlmsg_type == RTM_DELADDR)
@@ -1277,6 +1278,17 @@ static void process_addr(private_kernel_netlink_net_t *this,
 				}
 				addr_map_entry_remove(this->addrs, addr, iface);
 				addr_entry_destroy(addr);
+			}
+			else if (entry->addr->flags != msg->ifa_flags)
+			{
+				found = TRUE;
+				entry->addr->flags = msg->ifa_flags;
+				if (event && iface->usable)
+				{
+					changed = TRUE;
+					DBG1(DBG_KNL, "flags changed for %H on %s", host,
+						 iface->ifname);
+				}
 			}
 		}
 		else
@@ -1547,8 +1559,8 @@ CALLBACK(filter_addresses, bool,
 		{	/* skip deprecated addresses or those with an unusable scope */
 			continue;
 		}
-		if (addr->ip->get_family(addr->ip) == AF_INET6)
-		{	/* handle temporary IPv6 addresses according to config */
+		if (!addr->refcount && addr->ip->get_family(addr->ip) == AF_INET6)
+		{	/* handle non-VIP temporary IPv6 addresses according to config */
 			bool temporary = (addr->flags & IFA_F_TEMPORARY) == IFA_F_TEMPORARY;
 			if (data->this->prefer_temporary_addrs != temporary)
 			{
@@ -2726,7 +2738,7 @@ METHOD(kernel_net_t, add_route, status_t,
 	}
 
 	this->routes_lock->lock(this->routes_lock);
-	found = this->routes->get(this->routes, &lookup.route);
+	found = this->routes->ht.get(&this->routes->ht, &lookup.route);
 	if (found)
 	{
 		this->routes_lock->unlock(this->routes_lock);
@@ -2755,7 +2767,7 @@ METHOD(kernel_net_t, add_route, status_t,
 	if (status == SUCCESS)
 	{
 		found = route_entry_clone(&lookup.route);
-		this->routes->put(this->routes, found, found);
+		this->routes->ht.put(&this->routes->ht, found, found);
 	}
 	this->routes_lock->unlock(this->routes_lock);
 	return status;
@@ -2785,7 +2797,7 @@ METHOD(kernel_net_t, del_route, status_t,
 	}
 
 	this->routes_lock->lock(this->routes_lock);
-	found = this->routes->remove(this->routes, &lookup.route);
+	found = this->routes->ht.remove(&this->routes->ht, &lookup.route);
 	if (!found)
 	{
 		this->routes_lock->unlock(this->routes_lock);
@@ -3023,18 +3035,9 @@ static void check_kernel_features(private_kernel_netlink_net_t *this)
 /**
  * Destroy an address to iface map
  */
-static void addr_map_destroy(hashtable_t *map)
+static void addr_map_destroy(hashlist_t *map)
 {
-	enumerator_t *enumerator;
-	addr_map_entry_t *addr;
-
-	enumerator = map->create_enumerator(map);
-	while (enumerator->enumerate(enumerator, NULL, (void**)&addr))
-	{
-		free(addr);
-	}
-	enumerator->destroy(enumerator);
-	map->destroy(map);
+	map->ht.destroy_function(&map->ht, (void*)free);
 }
 
 METHOD(kernel_net_t, destroy, void,
@@ -3043,7 +3046,7 @@ METHOD(kernel_net_t, destroy, void,
 	enumerator_t *enumerator;
 	route_entry_t *route;
 
-	if (this->routing_table)
+	if (this->routing_table && this->socket)
 	{
 		manage_rule(this, RTM_DELRULE, AF_INET, this->routing_table,
 					this->routing_table_prio);
@@ -3055,7 +3058,7 @@ METHOD(kernel_net_t, destroy, void,
 		lib->watcher->remove(lib->watcher, this->socket_events);
 		close(this->socket_events);
 	}
-	enumerator = this->routes->create_enumerator(this->routes);
+	enumerator = this->routes->ht.create_enumerator(&this->routes->ht);
 	while (enumerator->enumerate(enumerator, NULL, (void**)&route))
 	{
 		manage_srcroute(this, RTM_DELROUTE, 0, route->dst_net, route->prefixlen,
@@ -3112,15 +3115,15 @@ kernel_netlink_net_t *kernel_netlink_net_create()
 			lib->settings->get_bool(lib->settings,
 				"%s.plugins.kernel-netlink.parallel_route", FALSE, lib->ns)),
 		.rt_exclude = linked_list_create(),
-		.routes = hashtable_create((hashtable_hash_t)route_entry_hash,
-								   (hashtable_equals_t)route_entry_equals, 16),
+		.routes = hashlist_create((hashtable_hash_t)route_entry_hash,
+								  (hashtable_equals_t)route_entry_equals, 16),
 		.net_changes = hashtable_create(
 								   (hashtable_hash_t)net_change_hash,
 								   (hashtable_equals_t)net_change_equals, 16),
-		.addrs = hashtable_create(
+		.addrs = hashlist_create(
 								(hashtable_hash_t)addr_map_entry_hash,
 								(hashtable_equals_t)addr_map_entry_equals, 16),
-		.vips = hashtable_create((hashtable_hash_t)addr_map_entry_hash,
+		.vips = hashlist_create((hashtable_hash_t)addr_map_entry_hash,
 								 (hashtable_equals_t)addr_map_entry_equals, 16),
 		.routes_lock = mutex_create(MUTEX_TYPE_DEFAULT),
 		.net_changes_lock = mutex_create(MUTEX_TYPE_DEFAULT),
@@ -3155,6 +3158,12 @@ kernel_netlink_net_t *kernel_netlink_net_create()
 	timerclear(&this->next_roam);
 
 	check_kernel_features(this);
+
+	if (!this->socket)
+	{
+		destroy(this);
+		return NULL;
+	}
 
 	if (streq(lib->ns, "starter"))
 	{	/* starter has no threads, so we do not register for kernel events */

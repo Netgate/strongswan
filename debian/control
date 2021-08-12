@@ -3,7 +3,7 @@ Section: net
 Priority: extra
 Maintainer: Netgate <support@netgate.com>
 Standards-Version: 3.9.2
-Build-Depends: debhelper (>= 7.0.0), libssl-dev (>= 0.9.8), libcap-dev, network-manager-dev (>= 0.9), libnm-glib-dev (>= 0.9), libcurl4-openssl-dev | libcurl4-gnutls-dev | libcurl4-nss-dev, libldap2-dev, libmysqlclient-dev, libsqlite3-dev
+Build-Depends: debhelper (>= 7.0.0), libssl-dev (>= 0.9.8), libcap-dev, libcurl4-openssl-dev, libldap2-dev, libmysqlclient-dev, libsqlite3-dev, gperf, libgmp-dev, libxml2-dev, libtspi-dev, libgcrypt20-dev
 Homepage: http://www.strongswan.org
 
 Package: netgate-strongswan
@@ -19,7 +19,10 @@ Description: IPsec VPN solution.
 
 Package: netgate-strongswan-kernel-vpp
 Architecture: any
-Depends: netgate-strongswan (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Depends: netgate-strongswan (= ${binary:Version}),
+  libtnsrinfra,
+  libvppmgmt,
+  ${shlibs:Depends}, ${misc:Depends}
 Description: IPsec VPN solution.
  strongSwan is a IPsec based VPN solution for the Linux kernel. It uses the
  native IPsec stack and runs on any recent 2.6 kernel (no patching required).
@@ -45,3 +48,8 @@ Description: IPsec VPN solution.
  modules can be used by any third party TNC Client/Server implementation
  possessing a standard IF-IMC/IMV interface. In addition, it implements
  PT-TLS to support TNC over TLS.
+
+Package: netgate-strongswan-dbg
+Architecture: any
+Depends: netgate-strongswan (= ${binary:Version}), ${misc:Depends}
+Description: IPsec VPN solution -- debug symbols

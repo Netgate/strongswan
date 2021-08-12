@@ -40,6 +40,29 @@ charon.cache_crls = no
 	Certification Authority (CA) to **/etc/ipsec.d/crls** (stroke) or
 	**/etc/swanctl/x509crl** (vici), respectively.
 
+charon.check_current_path = no
+	Whether to use DPD to check if the current path still works after any
+	changes to interfaces/addresses.
+
+	By default, after detecting any changes to interfaces and/or addresses no
+	action is taken if the current path to the remote peer still looks usable.
+	Enabling this option will use DPD to check if the path actually still works,
+	or, for instance, the peer removed the state after a longer phase without
+	connectivity.  It will also trigger a MOBIKE update if NAT mappings were
+	removed during the downtime.
+
+charon.cisco_flexvpn = no
+	Send the Cisco FlexVPN vendor ID payload (IKEv2 only).
+
+	Send the Cisco FlexVPN vendor ID payload, which is required in order to make
+	Cisco brand devices allow negotiating a local traffic selector (from
+	strongSwan's point of view) that is not the assigned virtual IP address if
+	such an address is requested by	strongSwan.  Sending the Cisco FlexVPN
+	vendor ID prevents the peer from narrowing the initiator's local traffic
+	selector and allows it to e.g. negotiate a TS of 0.0.0.0/0 == 0.0.0.0/0
+	instead.  This has been tested with a "tunnel mode ipsec ipv4" Cisco
+	template but should also work for GRE encapsulation.
+
 charon.cisco_unity = no
 	Send Cisco Unity vendor ID payload (IKEv1 only).
 
@@ -106,9 +129,6 @@ charon.dns2
 charon.dos_protection = yes
 	Enable Denial of Service protection using cookies and aggressiveness checks.
 
-charon.ecp_x_coordinate_only = yes
-	Compliance with the errata for RFC 4753.
-
 charon.flush_auth_cfg = no
 	Free objects during authentication (might conflict with plugins).
 
@@ -119,6 +139,10 @@ charon.flush_auth_cfg = no
 
 charon.follow_redirects = yes
 	Whether to follow IKEv2 redirects (RFC 5685).
+
+charon.force_eap_only_authentication = no
+	Violate RFC 5998 and use EAP-only authentication even if the peer did not
+	send an EAP_ONLY_AUTHENTICATION notify during IKE_AUTH.
 
 charon.fragment_size = 1280
 	Maximum size (complete IP datagram size in bytes) of a sent IKE fragment
@@ -215,6 +239,11 @@ charon.interfaces_use
 
 charon.keep_alive = 20s
 	NAT keep alive interval.
+
+charon.keep_alive_dpd_margin = 0s
+	Number of seconds the keep alive interval may be exceeded before a DPD is
+	sent instead of a NAT keep alive (0 to disable).  This is only useful if a
+	clock is used that includes time spent suspended (e.g. CLOCK_BOOTTIME).
 
 charon.leak_detective.detailed = yes
 	Includes source file names and line numbers in leak detective output.
@@ -443,6 +472,24 @@ charon.tls.mac
 
 charon.tls.suites
 	List of TLS cipher suites.
+
+charon.tls.ke_group
+	List of TLS key exchange groups.
+
+charon.tls.signature
+	List of TLS signature schemes.
+
+charon.tls.send_certreq_authorities = yes
+	Whether to include CAs in a server's CertificateRequest message.
+
+	Whether to include CAs in a server's CertificateRequest message. May be
+	disabled if clients can't handle a long list of CAs.
+
+charon.tls.version_min = 1.2
+	Minimum TLS version to negotiate.
+
+charon.tls.version_max = 1.2
+	Maximum TLS version to negotiate.
 
 charon.user
 	Name of the user the daemon changes to after startup.

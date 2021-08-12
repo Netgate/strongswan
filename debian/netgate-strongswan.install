@@ -1,6 +1,6 @@
 etc/strongswan/*							etc/strongswan
 lib/systemd/system/strongswan.service					lib/systemd/system
-lib/systemd/system/strongswan-swanctl.service				lib/systemd/system
+lib/systemd/system/strongswan-dataplane.service				lib/systemd/system
 usr/lib/strongswan/libcharon.so.0					usr/lib/strongswan
 usr/lib/strongswan/libcharon.so.0.0.0					usr/lib/strongswan
 usr/lib/strongswan/libtls.so.0						usr/lib/strongswan
