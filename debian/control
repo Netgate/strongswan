@@ -8,7 +8,7 @@ Homepage: http://www.strongswan.org
 
 Package: netgate-strongswan
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: tnsr-dataplane-netns, ${shlibs:Depends}, ${misc:Depends}
 Description: IPsec VPN solution.
  strongSwan is a IPsec based VPN solution for the Linux kernel. It uses the
  native IPsec stack and runs on any recent 2.6 kernel (no patching required).
