@@ -443,8 +443,6 @@ METHOD(task_t, process_r, status_t,
 			other_old = this->ike_sa->get_other_host(this->ike_sa);
 			if (!other->equals(other, other_old))
 			{
-				DBG1(DBG_IKE, "remote address changed from %H to %H", other_old,
-					 other);
 				other_new = other;
 				/* our address might have changed too if the responder used
 				 * a different address from our list to reach us */
@@ -501,6 +499,8 @@ METHOD(task_t, process_i, status_t,
 	}
 	else if (message->get_exchange_type(message) == INFORMATIONAL)
 	{
+		bool force = FALSE;
+
 		if (is_newer_update_queued(this))
 		{
 			return SUCCESS;
@@ -535,6 +535,7 @@ METHOD(task_t, process_i, status_t,
 			}
 			else if (this->natd->has_mapping_changed(this->natd))
 			{	/* force a check/update if mappings have changed during a DPD */
+				force = TRUE;
 				this->check = TRUE;
 				DBG1(DBG_IKE, "detected changes in NAT mappings, "
 					 "initiating MOBIKE update");
@@ -555,7 +556,7 @@ METHOD(task_t, process_i, status_t,
 			{
 				other_new = other;
 			}
-			if (me_new || other_new)
+			if (me_new || other_new || force)
 			{
 				this->ike_sa->update_hosts(this->ike_sa, me_new, other_new,
 										   UPDATE_HOSTS_FORCE_ALL);

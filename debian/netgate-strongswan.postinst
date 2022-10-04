@@ -2,6 +2,33 @@
 
 set -e
 
+charon_conf_file=/etc/strongswan/strongswan.d/charon.conf
+tnsr_charon_conf_file=/etc/strongswan/strongswan.d/tnsr_charon_defaults.conf
+
+rm -f ${tnsr_charon_conf_file}
+
+if [ -f ${charon_conf_file} -a "$1" = "configure" ] \
+    && ! grep -q '^[^#]*retransmit_base' ${charon_conf_file}; then
+        cat > ${tnsr_charon_conf_file} << EOF
+#
+# TNSR adjustments to options for the charon IKE daemon.
+# This file is a part of netgate-strongswan package
+# installation process.
+# This file is rewritten on every package upgrade.
+#
+# To persistently change any of the below options
+# 1. set it in the original config file charon.conf;
+#    this will preserve the value over package upgrades
+# 2. and remove it from the listing below;
+#    as values set here shadow those of charon.conf
+#
+
+charon {
+    retransmit_base = 1.0
+}
+EOF
+fi
+
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] \
 	|| [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
     if [ -d /run/systemd/system ]; then

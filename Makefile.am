@@ -85,21 +85,16 @@ coverage:
 		@echo "reconfigure with --enable-coverage"
 endif
 
-pkg-srpm: dist
-	make -C extras/rpm srpm
-
-pkg-rpm: dist
-	make -C extras/rpm
-
 #### include version information in the distibution tarball
-EXTRA_DIST += extras/scripts/version extras/scripts/.version
+EXTRA_DIST += extras/scripts/version
 
-extras/scripts/.version:
-	rm -f extras/scripts/.version
+extras/scripts/.tmpversion:
 	sh extras/scripts/version > extras/scripts/.tmpversion
-	mv extras/scripts/.tmpversion extras/scripts/.version
 
 DISTCLEANFILES = extras/scripts/.version *.tar.gz
+
+dist-hook: extras/scripts/.tmpversion
+	mv $(srcdir)/extras/scripts/.tmpversion $(distdir)/extras/scripts/.version
 
 clean-local: cov-reset-common
 		@find $(top_builddir)/src $(top_builddir)/scripts -name "*.gcno" -delete

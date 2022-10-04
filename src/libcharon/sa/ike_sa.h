@@ -1170,7 +1170,7 @@ struct ike_sa_t {
 	void (*remove_task)(ike_sa_t *this, enumerator_t *enumerator);
 
 	/**
-	 * Flush a task queue, cancelling all tasks in it.
+	 * Flush a task queue, canceling all tasks in it.
 	 *
 	 * @param queue			queue type to flush
 	 */
@@ -1242,5 +1242,13 @@ struct ike_sa_t {
  */
 ike_sa_t *ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 						ike_version_t version);
+
+/**
+ * Check if the given IKE_SA can be reauthenticated actively or if config
+ * parameters or the authentication method prevent it.
+ *
+ * @return				TRUE if active reauthentication is possible
+ */
+bool ike_sa_can_reauthenticate(ike_sa_t *this);
 
 #endif /** IKE_SA_H_ @}*/

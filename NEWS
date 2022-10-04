@@ -1,3 +1,95 @@
+strongswan-5.9.5
+----------------
+
+- Fixed a vulnerability in the EAP client implementation that was caused by
+  incorrectly handling early EAP-Success messages. It may allow to bypass the
+  client and in some scenarios even the server authentication, or could lead to
+  a denial-of-service attack.
+  This vulnerability has been registered as CVE-2021-45079.
+
+- Using the trusted RSA or ECC Endorsement Key of the TPM 2.0, libtpmtss may now
+  establish a secure session via RSA encryption or an ephemeral ECDH key
+  exchange, respectively. The session allows HMAC-based authenticated
+  communication with the TPM 2.0 and the exchanged parameters can be encrypted
+  where necessary to guarantee confidentiality (e.g. when using the TPM as RNG).
+
+- Basic support for OpenSSL 3.0 has been added, in particular, the new
+  load_legacy option (enabled by default) allows loading the "legacy" provider
+  for algorithms like MD4 and DES (both required for EAP-MSCHAPv2), and the
+  existing fips_mode option allows explicitly loading the "fips" provider e.g.
+  if it's not activated in OpenSSL's fipsmodule.cnf.
+
+- The MTU of TUN devices created by the kernel-pfroute plugin on macOS and
+  FreeBSD is now configurable and reduced to 1400 bytes, by default.  This also
+  fixes an issue on macOS 12 that prevented the detection of virtual IPs
+  installed on such TUN devices.
+
+- When rekeying CHILD_SAs, the old outbound SA is now uninstalled shortly after
+  the new SA has been installed on the initiator/winner. This is useful for
+  IPsec implementations where the ordering of SAs is unpredictable and we can't
+  set the SPI on the outbound policy to switch to the new SA while both are
+  installed.
+
+- The sw-collector utility may now iterate through APT history logs processed
+  by logrotate.
+
+- The openssl plugin now only announces the ECDH groups actually supported by
+  OpenSSL (determined via EC_get_builtin_curves()).
+
+
+strongswan-5.9.4
+----------------
+
+- Fixed a denial-of-service vulnerability in the gmp plugin that was caused by
+  an integer overflow when processing RSASSA-PSS signatures with very large
+  salt lengths.
+  This vulnerability has been registered as CVE-2021-41990.
+
+- Fixed a denial-of-service vulnerabililty in the in-memory certificate cache
+  if certificates are replaced and a very large random value caused an integer
+  overflow.
+  This vulnerability has been registered as CVE-2021-41991.
+
+- Fixed a related flaw that caused the daemon to accept an infinite number of
+  versions of a valid certificate by modifying the parameters in the
+  signatureAlgorithm field of the outer X.509 Certificate structure.
+
+- AUTH_LIFETIME notifies are now only sent by a responder if it can't
+  reauthenticate the IKE_SA itself due to asymmetric authentication (i.e. EAP)
+  or the use of virtual IPs.
+
+- Serial number generation in several pki sub-commands has been fixed so they
+  don't start with an unintended zero byte.
+
+- Initialize libtpmtss in all programs and library that use it.
+
+- Migrated testing scripts to Python 3.
+
+
+strongswan-5.9.3
+----------------
+
+- Added AES_ECB, SHA-3 and SHAKE-256 support to wolfssl plugin.
+
+- Added AES_CCM and SHA-3 signature support to openssl plugin.
+
+- The x509 and openssl plugins now consider the authorityKeyIdentifier, if
+  available, before verifying signatures, which avoids unnecessary signature
+  verifications after a CA key rollover if both certificates are loaded.
+
+- The pkcs11 plugin better handles optional attributes like CKA_TRUSTED, which
+  previously depended on a version check.
+
+- charon-nm now supports using SANs as client identities, not only full DNs.
+
+- charon-tkm now handles IKE encryption.
+
+- A MOBIKE update is sent again if a a change in the NAT mappings is detected
+  but the endpoints stay the same.
+
+- Converted most of the test case scenarios to the vici interface
+
+
 strongswan-5.9.2
 ----------------
 
@@ -2719,7 +2811,7 @@ strongswan-4.1.5
 strongswan-4.1.4
 ----------------
 
-- The pluto IKEv1 daemon now exhibits the same behaviour as its
+- The pluto IKEv1 daemon now exhibits the same behavior as its
   IKEv2 companion charon by inserting an explicit route via the
   _updown script only if a sourceip exists. This is admissible
   since routing through the IPsec tunnel is handled automatically

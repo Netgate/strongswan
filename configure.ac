@@ -19,7 +19,7 @@
 #  initialize & set some vars
 # ============================
 
-AC_INIT([strongSwan],[m4_esyscmd([./extras/scripts/version])])
+AC_INIT([strongSwan],[m4_esyscmd([./extras/scripts/version | tr -d '\n'])])
 AM_INIT_AUTOMAKE(m4_esyscmd([
 	echo tar-pax
 	echo subdir-objects
@@ -238,7 +238,7 @@ ARG_ENABL_SET([ext-auth],       [enable plugin calling an external authorization
 ARG_ENABL_SET([ipseckey],       [enable IPSECKEY authentication plugin.])
 ARG_ENABL_SET([keychain],       [enables OS X Keychain Services credential set.])
 ARG_ENABL_SET([pkcs11],         [enables the PKCS11 token support plugin.])
-ARG_ENABL_SET([tpm],            [enables the TPM plugin.])
+ARG_ENABL_SET([tpm],            [enables the TPM plugin to access private keys and certificates bound to a TPM 2.0.])
 ARG_DISBL_SET([revocation],     [disable X509 CRL/OCSP revocation check plugin.])
 ARG_ENABL_SET([whitelist],      [enable peer identity whitelisting plugin.])
 ARG_DISBL_SET([xauth-generic],  [disable generic XAuth backend.])
@@ -521,6 +521,10 @@ fi
 
 if test x$aikgen = xtrue; then
 	tss_trousers=true
+fi
+
+if test x$tpm = xtrue; then
+	tss_tss2=true
 fi
 
 if test x$gmp = xtrue -o x$ntru = xtrue -o x$bliss = xtrue; then
@@ -1294,6 +1298,11 @@ if test x$bfd_backtraces = xtrue; then
 	AC_CHECK_LIB([bfd],[bfd_init],[LIBS="$LIBS"],[AC_MSG_ERROR([binutils libbfd not found!])],[])
 	AC_CHECK_HEADER([bfd.h],[AC_DEFINE([HAVE_BFD_H],,[have binutils bfd.h])],
 		[AC_MSG_ERROR([binutils bfd.h header not found!])])
+	AC_CHECK_DECLS(
+		[bfd_section_flags, bfd_get_section_flags,
+		 bfd_section_vma, bfd_get_section_vma,
+		 bfd_section_size, bfd_get_section_size], [], [],
+		[[#include <bfd.h>]])
 	BFDLIB="-lbfd"
 	AC_SUBST(BFDLIB)
 fi
@@ -2110,7 +2119,6 @@ AC_CONFIG_FILES([
 	src/xfrmi/Makefile
 	scripts/Makefile
 	testing/Makefile
-	extras/rpm/Makefile
 ])
 
 # =================

@@ -38,9 +38,8 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: ~/.ccache
-          key: ccache-android-${{ github.ref }}:${{ github.sha }}
+          key: ccache-android-${{ github.sha }}
           restore-keys: |
-            ccache-android-${{ github.ref }}:
             ccache-android-
       - run: |
           sudo apt-get install -qq ccache
@@ -48,8 +47,7 @@ jobs:
           ccache -z
       - uses: ./.github/actions/default
       - run: ccache -s
-      - if: ${{ success() }}
-        uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v2
         with:
           name: Lint Results
           path: src/frontends/android/app/build/reports/lint-results.xml

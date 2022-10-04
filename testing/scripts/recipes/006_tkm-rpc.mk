@@ -2,7 +2,7 @@
 
 PKG = tkm-rpc
 SRC = https://git.codelabs.ch/git/$(PKG).git
-REV = 1235905c5c6fad5df1eecb6ba0447d5722753203
+REV = 85f725c0c938cc7f8a48ed86892d6b112b858b8b
 
 PREFIX = /usr/local/ada
 
@@ -19,7 +19,7 @@ all: install
 	@rm -f .$(PKG)-checkout-* && touch $@
 
 .$(PKG)-built-$(REV): .$(PKG)-checkout-$(REV)
-	cd $(PKG) && make
+	cd $(PKG) && make tests && make
 	@rm -f .$(PKG)-built-* && touch $@
 
 install: .$(PKG)-built-$(REV)

@@ -2,7 +2,7 @@
 
 PKG = botan
 SRC = https://github.com/randombit/$(PKG).git
-REV = 2.17.1
+REV = 2.18.2
 
 NUM_CPUS := $(shell getconf _NPROCESSORS_ONLN)
 
@@ -23,7 +23,7 @@ all: install
 	@rm -f .$(PKG)-checkout-* && touch $@
 
 .$(PKG)-built-$(REV): .$(PKG)-checkout-$(REV)
-	cd $(PKG) && python ./configure.py $(CONFIG_OPTS) && make -j $(NUM_CPUS)
+	cd $(PKG) && python3 ./configure.py $(CONFIG_OPTS) && make -j $(NUM_CPUS)
 	@rm -f .$(PKG)-built-* && touch $@
 
 install: .$(PKG)-built-$(REV)

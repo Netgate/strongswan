@@ -1372,6 +1372,7 @@ static void process_route(private_kernel_netlink_net_t *this,
 				if (RTA_PAYLOAD(rta) == sizeof(uint32_t) &&
 					this->routing_table == *(uint32_t*)RTA_DATA(rta))
 				{
+					DESTROY_IF(host);
 					return;
 				}
 				break;
@@ -2548,9 +2549,11 @@ METHOD(kernel_net_t, del_ip, status_t,
 		if (status == SUCCESS && wait)
 		{	/* wait until the address is really gone */
 			this->lock->write_lock(this->lock);
-			while (is_known_vip(this, virtual_ip))
-			{
-				this->condvar->wait(this->condvar, this->lock);
+			while (is_known_vip(this, virtual_ip) &&
+				   lib->watcher->get_state(lib->watcher) != WATCHER_STOPPED)
+			{	/* don't wait during deinit when we can't get notified,
+				 * re-evaluate watcher state if we have to wait longer */
+				this->condvar->timed_wait(this->condvar, this->lock, 1000);
 			}
 			this->lock->unlock(this->lock);
 		}

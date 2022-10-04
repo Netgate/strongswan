@@ -2,6 +2,8 @@
 
 set -e
 
+rm -f /etc/strongswan/strongswan.d/tnsr_charon_defaults.conf
+
 if [ -d /run/systemd/system ]; then
     systemctl --system daemon-reload >/dev/null || true
 fi

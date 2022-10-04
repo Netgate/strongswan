@@ -71,7 +71,7 @@ binary-arch: build install
 	dh_installinit --name=ipsec
 	dh_install -s
 	dh_link
-	dh_strip --dbg=netgate-strongswan-dbg
+	dh_strip --dbg-package=netgate-strongswan-dbg
 	dh_compress
 	dh_fixperms -Xetc/ipsec.secrets -Xetc/ipsec.d
 	dh_makeshlibs

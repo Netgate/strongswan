@@ -2,7 +2,7 @@
 
 PKG = tkm
 SRC = https://git.codelabs.ch/git/$(PKG).git
-REV = b99aeb158b7701ea4a77184bff5ff38f8e26013a
+REV = e46eef9f0991ba2777dcde845c2e00b8df9c72f7
 
 export ADA_PROJECT_PATH=/usr/local/ada/lib/gnat
 
@@ -17,7 +17,7 @@ all: install
 	@rm -f .$(PKG)-checkout-* && touch $@
 
 .$(PKG)-built-$(REV): .$(PKG)-checkout-$(REV)
-	cd $(PKG) && make
+	cd $(PKG) && make tests && make
 	@rm -f .$(PKG)-built-* && touch $@
 
 install: .$(PKG)-built-$(REV)

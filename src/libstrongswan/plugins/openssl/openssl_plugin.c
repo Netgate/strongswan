@@ -16,6 +16,7 @@
 
 #include <library.h>
 #include <utils/debug.h>
+#include <collections/array.h>
 #include <threading/thread.h>
 #include <threading/mutex.h>
 #include <threading/thread_value.h>
@@ -27,6 +28,12 @@
 #include <openssl/crypto.h>
 #ifndef OPENSSL_NO_ENGINE
 #include <openssl/engine.h>
+#endif
+#ifndef OPENSSL_NO_ECDH
+#include <openssl/ec.h>
+#endif
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/provider.h>
 #endif
 
 #include "openssl_plugin.h"
@@ -67,6 +74,13 @@ struct private_openssl_plugin_t {
 	 * public functions
 	 */
 	openssl_plugin_t public;
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	/**
+	 * Loaded providers
+	 */
+	array_t *providers;
+#endif
 };
 
 /**
@@ -486,10 +500,55 @@ METHOD(plugin_t, get_name, char*,
 	return "openssl";
 }
 
+#ifndef OPENSSL_NO_ECDH
+/**
+ * Check if the given DH group is in the list of supported curves.
+ */
+static bool ecdh_group_supported(EC_builtin_curve *curves, size_t num_curves,
+								 diffie_hellman_group_t group)
+{
+	int j;
+
+	for (j = 0; j < num_curves; j++)
+	{
+		if (curves[j].nid == openssl_ecdh_group_to_nid(group))
+		{
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/**
+ * Only add features for ECDH groups that are actually supported.
+ */
+static void add_ecdh_features(plugin_feature_t *features,
+							  plugin_feature_t *to_add, int count, int *pos)
+{
+	size_t num_curves;
+	int i;
+
+	num_curves = EC_get_builtin_curves(NULL, 0);
+
+	EC_builtin_curve curves[num_curves];
+
+	num_curves = EC_get_builtin_curves(curves, num_curves);
+
+	for (i = 0; i < count; i++)
+	{
+		if (to_add[i].kind != FEATURE_PROVIDE ||
+			ecdh_group_supported(curves, num_curves, to_add[i].arg.dh_group))
+		{
+			features[(*pos)++] = to_add[i];
+		}
+	}
+}
+#endif /* OPENSSL_NO_ECDH */
+
 METHOD(plugin_t, get_features, int,
 	private_openssl_plugin_t *this, plugin_feature_t *features[])
 {
-	static plugin_feature_t f[] = {
+	static plugin_feature_t f_base[] = {
 		/* we provide OpenSSL threading callbacks */
 		PLUGIN_PROVIDE(CUSTOM, "openssl-threading"),
 		/* crypters */
@@ -501,6 +560,9 @@ METHOD(plugin_t, get_features, int,
 			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_ECB, 16),
 			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_ECB, 24),
 			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_ECB, 32),
+			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_CFB, 16),
+			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_CFB, 24),
+			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_CFB, 32),
 #endif
 #ifndef OPENSSL_NO_CAMELLIA
 			PLUGIN_PROVIDE(CRYPTER, ENCR_CAMELLIA_CBC, 16),
@@ -615,24 +677,23 @@ METHOD(plugin_t, get_features, int,
 			PLUGIN_PROVIDE(AEAD, ENCR_AES_GCM_ICV8,  16),
 			PLUGIN_PROVIDE(AEAD, ENCR_AES_GCM_ICV8,  24),
 			PLUGIN_PROVIDE(AEAD, ENCR_AES_GCM_ICV8,  32),
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL
+			/* CCM is available before 1.1.0 but not via generic controls */
+			PLUGIN_PROVIDE(AEAD, ENCR_AES_CCM_ICV16, 16),
+			PLUGIN_PROVIDE(AEAD, ENCR_AES_CCM_ICV16, 24),
+			PLUGIN_PROVIDE(AEAD, ENCR_AES_CCM_ICV16, 32),
+			PLUGIN_PROVIDE(AEAD, ENCR_AES_CCM_ICV12, 16),
+			PLUGIN_PROVIDE(AEAD, ENCR_AES_CCM_ICV12, 24),
+			PLUGIN_PROVIDE(AEAD, ENCR_AES_CCM_ICV12, 32),
+			PLUGIN_PROVIDE(AEAD, ENCR_AES_CCM_ICV8,  16),
+			PLUGIN_PROVIDE(AEAD, ENCR_AES_CCM_ICV8,  24),
+			PLUGIN_PROVIDE(AEAD, ENCR_AES_CCM_ICV8,  32),
+#endif /* OPENSSL_VERSION_NUMBER */
 #endif /* OPENSSL_NO_AES */
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(OPENSSL_NO_CHACHA)
 			PLUGIN_PROVIDE(AEAD, ENCR_CHACHA20_POLY1305, 32),
 #endif /* OPENSSL_NO_CHACHA */
 #endif /* OPENSSL_VERSION_NUMBER */
-#ifndef OPENSSL_NO_ECDH
-		/* EC DH groups */
-		PLUGIN_REGISTER(DH, openssl_ec_diffie_hellman_create),
-			PLUGIN_PROVIDE(DH, ECP_256_BIT),
-			PLUGIN_PROVIDE(DH, ECP_384_BIT),
-			PLUGIN_PROVIDE(DH, ECP_521_BIT),
-			PLUGIN_PROVIDE(DH, ECP_224_BIT),
-			PLUGIN_PROVIDE(DH, ECP_192_BIT),
-			PLUGIN_PROVIDE(DH, ECP_256_BP),
-			PLUGIN_PROVIDE(DH, ECP_384_BP),
-			PLUGIN_PROVIDE(DH, ECP_512_BP),
-			PLUGIN_PROVIDE(DH, ECP_224_BP),
-#endif /* OPENSSL_NO_ECDH */
 #ifndef OPENSSL_NO_DH
 		/* MODP DH groups */
 		PLUGIN_REGISTER(DH, openssl_diffie_hellman_create),
@@ -675,19 +736,39 @@ METHOD(plugin_t, get_features, int,
 		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA2_256),
 		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA2_224),
 		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA2_256),
+		PLUGIN_PROVIDE(PRIVKEY_DECRYPT, ENCRYPT_RSA_OAEP_SHA224),
+		PLUGIN_PROVIDE(PUBKEY_ENCRYPT,  ENCRYPT_RSA_OAEP_SHA224),
+		PLUGIN_PROVIDE(PRIVKEY_DECRYPT, ENCRYPT_RSA_OAEP_SHA256),
+		PLUGIN_PROVIDE(PUBKEY_ENCRYPT,  ENCRYPT_RSA_OAEP_SHA256),
 #endif
 #ifndef OPENSSL_NO_SHA512
 		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA2_384),
 		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA2_512),
 		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA2_384),
 		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA2_512),
+		PLUGIN_PROVIDE(PRIVKEY_DECRYPT, ENCRYPT_RSA_OAEP_SHA384),
+		PLUGIN_PROVIDE(PUBKEY_ENCRYPT,  ENCRYPT_RSA_OAEP_SHA384),
+		PLUGIN_PROVIDE(PRIVKEY_DECRYPT, ENCRYPT_RSA_OAEP_SHA512),
+		PLUGIN_PROVIDE(PUBKEY_ENCRYPT,  ENCRYPT_RSA_OAEP_SHA512),
+#endif
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SHA3)
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA3_224),
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA3_256),
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA3_384),
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA3_512),
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA3_224),
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA3_256),
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA3_384),
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA3_512),
 #endif
 #ifndef OPENSSL_NO_MD5
 		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_MD5),
 		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_MD5),
 #endif
 		PLUGIN_PROVIDE(PRIVKEY_DECRYPT, ENCRYPT_RSA_PKCS1),
-		PLUGIN_PROVIDE(PUBKEY_ENCRYPT, ENCRYPT_RSA_PKCS1),
+		PLUGIN_PROVIDE(PUBKEY_ENCRYPT,  ENCRYPT_RSA_PKCS1),
+		PLUGIN_PROVIDE(PRIVKEY_DECRYPT, ENCRYPT_RSA_OAEP_SHA1),
+		PLUGIN_PROVIDE(PUBKEY_ENCRYPT,  ENCRYPT_RSA_OAEP_SHA1),
 #endif /* OPENSSL_NO_RSA */
 		/* certificate/CRL loading */
 		PLUGIN_REGISTER(CERT_DECODE, openssl_x509_load, TRUE),
@@ -772,6 +853,33 @@ METHOD(plugin_t, get_features, int,
 			PLUGIN_PROVIDE(RNG, RNG_STRONG),
 			PLUGIN_PROVIDE(RNG, RNG_WEAK),
 	};
+	static plugin_feature_t f_ecdh[] = {
+#ifndef OPENSSL_NO_ECDH
+		/* EC DH groups */
+		PLUGIN_REGISTER(DH, openssl_ec_diffie_hellman_create),
+			PLUGIN_PROVIDE(DH, ECP_256_BIT),
+			PLUGIN_PROVIDE(DH, ECP_384_BIT),
+			PLUGIN_PROVIDE(DH, ECP_521_BIT),
+			PLUGIN_PROVIDE(DH, ECP_224_BIT),
+			PLUGIN_PROVIDE(DH, ECP_192_BIT),
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+			PLUGIN_PROVIDE(DH, ECP_256_BP),
+			PLUGIN_PROVIDE(DH, ECP_384_BP),
+			PLUGIN_PROVIDE(DH, ECP_512_BP),
+			PLUGIN_PROVIDE(DH, ECP_224_BP),
+#endif /* OPENSSL_VERSION_NUMBER */
+#endif /* OPENSSL_NO_ECDH */
+	};
+	static plugin_feature_t f[countof(f_base) + countof(f_ecdh)] = {};
+	static int count = 0;
+
+	if (!count)
+	{
+		plugin_features_add(f, f_base, countof(f_base), &count);
+#ifndef OPENSSL_NO_ECDH
+		add_ecdh_features(f, f_ecdh, countof(f_ecdh), &count);
+#endif
+	}
 	*features = f;
 	return countof(f);
 }
@@ -779,6 +887,15 @@ METHOD(plugin_t, get_features, int,
 METHOD(plugin_t, destroy, void,
 	private_openssl_plugin_t *this)
 {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	OSSL_PROVIDER *provider;
+	while (array_remove(this->providers, ARRAY_TAIL, &provider))
+	{
+		OSSL_PROVIDER_unload(provider);
+	}
+	array_destroy(this->providers);
+#endif /* OPENSSL_VERSION_NUMBER */
+
 /* OpenSSL 1.1.0 cleans up itself at exit and while OPENSSL_cleanup() exists we
  * can't call it as we couldn't re-initialize the library (as required by the
  * unit tests and the Android app) */
@@ -799,6 +916,31 @@ METHOD(plugin_t, destroy, void,
 	free(this);
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+typedef struct {
+	char names[BUF_LEN];
+	int len;
+} ossl_provider_names_t;
+
+/**
+ * Callback to produce a list of the names of loaded providers
+ */
+static int concat_ossl_providers(OSSL_PROVIDER *provider, void *cbdata)
+{
+	ossl_provider_names_t *data = cbdata;
+	int len;
+
+	len = snprintf(&data->names[data->len], sizeof(data->names) - data->len,
+				   " %s", OSSL_PROVIDER_get0_name(provider));
+	if (len < (sizeof(data->names) - data->len))
+	{
+		data->len += len;
+		return 1;
+	}
+	return 0;
+}
+#endif
+
 /*
  * see header file
  */
@@ -814,15 +956,16 @@ plugin_t *openssl_plugin_create()
 	{
 		if (FIPS_mode() != fips_mode && !FIPS_mode_set(fips_mode))
 		{
-			DBG1(DBG_LIB, "unable to set openssl FIPS mode(%d) from (%d)",
+			DBG1(DBG_LIB, "unable to set OpenSSL FIPS mode(%d) from (%d)",
 				 fips_mode, FIPS_mode());
 			return NULL;
 		}
 	}
-#else
+#elif OPENSSL_VERSION_NUMBER < 0x30000000L
+	/* OpenSSL 3.0+ is handled below */
 	if (fips_mode)
 	{
-		DBG1(DBG_LIB, "openssl FIPS mode(%d) unavailable", fips_mode);
+		DBG1(DBG_LIB, "OpenSSL FIPS mode(%d) unavailable", fips_mode);
 		return NULL;
 	}
 #endif
@@ -855,11 +998,43 @@ plugin_t *openssl_plugin_create()
 #endif /* OPENSSL_NO_ENGINE */
 #endif /* OPENSSL_VERSION_NUMBER */
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	if (fips_mode)
+	{
+		OSSL_PROVIDER *fips;
+
+		fips = OSSL_PROVIDER_load(NULL, "fips");
+		if (!fips)
+		{
+			DBG1(DBG_LIB, "unable to load OpenSSL FIPS provider");
+			return NULL;
+		}
+		array_insert_create(&this->providers, ARRAY_TAIL, fips);
+		/* explicitly load the base provider containing encoding functions */
+		array_insert_create(&this->providers, ARRAY_TAIL,
+							OSSL_PROVIDER_load(NULL, "base"));
+	}
+	else if (lib->settings->get_bool(lib->settings, "%s.plugins.openssl.load_legacy",
+									 TRUE, lib->ns))
+	{
+		/* load the legacy provider for algorithms like MD4, DES, BF etc. */
+		array_insert_create(&this->providers, ARRAY_TAIL,
+							OSSL_PROVIDER_load(NULL, "legacy"));
+		/* explicitly load the default provider, as mentioned by crypto(7) */
+		array_insert_create(&this->providers, ARRAY_TAIL,
+							OSSL_PROVIDER_load(NULL, "default"));
+	}
+	ossl_provider_names_t data = {};
+	OSSL_PROVIDER_do_all(NULL, concat_ossl_providers, &data);
+	dbg(DBG_LIB, strpfx(lib->ns, "charon") ? 1 : 2,
+		"providers loaded by OpenSSL:%s", data.names);
+#endif /* OPENSSL_VERSION_NUMBER */
+
 #ifdef OPENSSL_FIPS
 	/* we do this here as it may have been enabled via openssl.conf */
 	fips_mode = FIPS_mode();
 	dbg(DBG_LIB, strpfx(lib->ns, "charon") ? 1 : 2,
-		"openssl FIPS mode(%d) - %sabled ", fips_mode, fips_mode ? "en" : "dis");
+		"OpenSSL FIPS mode(%d) - %sabled ", fips_mode, fips_mode ? "en" : "dis");
 #endif /* OPENSSL_FIPS */
 
 #if OPENSSL_VERSION_NUMBER < 0x1010100fL

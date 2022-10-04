@@ -4,7 +4,7 @@
 build_botan()
 {
 	# same revision used in the build recipe of the testing environment
-	BOTAN_REV=2.17.1
+	BOTAN_REV=c55f5d42650b # 2.18.2 + fix for SHA-3 compilation issue
 	BOTAN_DIR=$DEPS_BUILD_DIR/botan
 
 	if test -d "$BOTAN_DIR"; then
@@ -37,7 +37,7 @@ build_botan()
 
 build_wolfssl()
 {
-	WOLFSSL_REV=v4.7.0-stable
+	WOLFSSL_REV=v5.1.1-stable
 	WOLFSSL_DIR=$DEPS_BUILD_DIR/wolfssl
 
 	if test -d "$WOLFSSL_DIR"; then
@@ -46,14 +46,15 @@ build_wolfssl()
 
 	echo "$ build_wolfssl()"
 
-	WOLFSSL_CFLAGS="-DWOLFSSL_PUBLIC_MP -DWOLFSSL_DES_ECB -DHAVE_ECC_BRAINPOOL"
+	WOLFSSL_CFLAGS="-DWOLFSSL_PUBLIC_MP -DWOLFSSL_DES_ECB -DHAVE_AES_ECB \
+					-DHAVE_ECC_BRAINPOOL -DWOLFSSL_MIN_AUTH_TAG_SZ=8"
 	WOLFSSL_CONFIG="--prefix=$DEPS_PREFIX
 					--disable-crypttests --disable-examples
-					--enable-keygen --enable-rsapss --enable-aesccm
-					--enable-aesctr --enable-des3 --enable-camellia
-					--enable-curve25519 --enable-ed25519
-					--enable-curve448 --enable-ed448
-					--enable-sha3 --enable-shake256 --enable-ecccustcurves"
+					--enable-aesccm --enable-aesctr --enable-camellia
+					--enable-curve25519 --enable-curve448 --enable-des3
+					--enable-ecccustcurves --enable-ed25519 --enable-ed448
+					--enable-keygen --enable-md4 --enable-rsapss --enable-sha3
+					--enable-shake256"
 
 	git clone https://github.com/wolfSSL/wolfssl.git $WOLFSSL_DIR &&
 	cd $WOLFSSL_DIR &&
@@ -92,6 +93,12 @@ build_tss2()
 : ${DEPS_BUILD_DIR=$BUILD_DIR/..}
 : ${DEPS_PREFIX=/usr/local}
 
+if [ -e /etc/os-release ]; then
+	. /etc/os-release
+elif [ -e /usr/lib/os-release ]; then
+	. /usr/lib/os-release
+fi
+
 TARGET=check
 
 DEPS="libgmp-dev"
@@ -109,9 +116,13 @@ openssl*)
 	DEPS="libssl-dev"
 	;;
 gcrypt)
-	CONFIG="--disable-defaults --enable-pki --enable-gcrypt --enable-pkcs1"
-	export TESTS_PLUGINS="test-vectors pkcs1 gcrypt!"
-	DEPS="libgcrypt11-dev"
+	CONFIG="--disable-defaults --enable-pki --enable-gcrypt --enable-pkcs1 --enable-pkcs8"
+	export TESTS_PLUGINS="test-vectors pkcs1 pkcs8 gcrypt!"
+	if [ "$ID" = "ubuntu" -a "$VERSION_ID" = "20.04" ]; then
+		DEPS="libgcrypt20-dev"
+	else
+		DEPS="libgcrypt11-dev"
+	fi
 	;;
 botan)
 	CONFIG="--disable-defaults --enable-pki --enable-botan --enable-pem"
@@ -134,6 +145,13 @@ printf-builtin)
 	CONFIG="--with-printf-hooks=builtin"
 	;;
 all|coverage|sonarcloud)
+	if [ "$TEST" = "sonarcloud" ]; then
+		if [ -z "$SONAR_PROJECT" -o -z "$SONAR_ORGANIZATION" -o -z "$SONAR_TOKEN" ]; then
+			echo "The SONAR_PROJECT, SONAR_ORGANIZATION and SONAR_TOKEN" \
+				 "environment variables are required to run this test"
+			exit 1
+		fi
+	fi
 	CONFIG="--enable-all --disable-android-dns --disable-android-log
 			--disable-kernel-pfroute --disable-keychain
 			--disable-lock-profiler --disable-padlock --disable-fuzzing
@@ -150,20 +168,18 @@ all|coverage|sonarcloud)
 		# not actually required but configure checks for it
 		DEPS="$DEPS lcov"
 	fi
-	# Botan requires newer compilers, so disable it on Ubuntu 16.04
-	if test -n "$UBUNTU_XENIAL"; then
-		CONFIG="$CONFIG --disable-botan"
-	fi
 	DEPS="$DEPS libcurl4-gnutls-dev libsoup2.4-dev libunbound-dev libldns-dev
 		  libmysqlclient-dev libsqlite3-dev clearsilver-dev libfcgi-dev
 		  libldap2-dev libpcsclite-dev libpam0g-dev binutils-dev libnm-dev
-		  libgcrypt20-dev libjson-c-dev iptables-dev python-pip libtspi-dev
-		  libsystemd-dev"
+		  libgcrypt20-dev libjson-c-dev python3-pip libtspi-dev libsystemd-dev"
+	if [ "$ID" = "ubuntu" -a "$VERSION_ID" = "20.04" ]; then
+		DEPS="$DEPS libiptc-dev"
+	else
+		DEPS="$DEPS iptables-dev python3-setuptools"
+	fi
 	PYDEPS="tox"
 	if test "$1" = "build-deps"; then
-		if test -z "$UBUNTU_XENIAL"; then
-			build_botan
-		fi
+		build_botan
 		build_wolfssl
 		build_tss2
 	fi
@@ -224,11 +240,11 @@ macos)
 			--enable-scepclient --enable-socket-default --enable-sshkey
 			--enable-stroke --enable-swanctl --enable-unity --enable-updown
 			--enable-x509 --enable-xauth-generic"
-	DEPS="automake autoconf libtool bison gettext openssl curl"
+	DEPS="automake autoconf libtool bison gettext openssl@1.1 curl"
 	BREW_PREFIX=$(brew --prefix)
 	export PATH=$BREW_PREFIX/opt/bison/bin:$PATH
 	export ACLOCAL_PATH=$BREW_PREFIX/opt/gettext/share/aclocal:$ACLOCAL_PATH
-	for pkg in openssl curl
+	for pkg in openssl@1.1 curl
 	do
 		PKG_CONFIG_PATH=$BREW_PREFIX/opt/$pkg/lib/pkgconfig:$PKG_CONFIG_PATH
 		CPPFLAGS="-I$BREW_PREFIX/opt/$pkg/include $CPPFLAGS"
@@ -255,7 +271,7 @@ freebsd)
 			--enable-unbound --enable-unity --enable-xauth-eap --enable-xauth-pam
 			--with-printf-hooks=builtin --enable-attr-sql --enable-sql
 			--enable-farp"
-	DEPS="git gmp openldap-client libxml2 mysql80-client sqlite3 unbound ldns tpm2-tss"
+	DEPS="git gmp openldap24-client libxml2 mysql80-client sqlite3 unbound ldns tpm2-tss"
 	export GPERF=/usr/local/bin/gperf
 	export LEX=/usr/local/bin/flex
 	;;
@@ -301,8 +317,12 @@ apidoc)
 	TARGET=apidoc
 	;;
 lgtm)
+	if [ -z "$LGTM_PROJECT" -o -z "$LGTM_TOKEN" ]; then
+		echo "The LGTM_PROJECT and LGTM_TOKEN environment variables" \
+			 "are required to run this test"
+		exit 0
+	fi
 	DEPS="jq"
-
 	if test -z "$1"; then
 		base=$COMMIT_BASE
 		# after rebases or for new/duplicate branches, the passed base commit
@@ -314,12 +334,11 @@ lgtm)
 			base=$(git merge-base origin/master ${COMMIT_ID})
 		fi
 		base=$(git rev-parse $base)
-		project_id=1506185006272
 
 		echo "Starting code review for $COMMIT_ID (base $base) on lgtm.com"
 		git diff --binary $base > lgtm.patch || exit $?
 		curl -s -X POST --data-binary @lgtm.patch \
-			"https://lgtm.com/api/v1.0/codereviews/${project_id}?base=${base}&external-id=${BUILD_NUMBER}" \
+			"https://lgtm.com/api/v1.0/codereviews/${LGTM_PROJECT}?base=${base}&external-id=${BUILD_NUMBER}" \
 			-H 'Content-Type: application/octet-stream' \
 			-H 'Accept: application/json' \
 			-H "Authorization: Bearer ${LGTM_TOKEN}" > lgtm.res || exit $?
@@ -384,7 +403,7 @@ deps)
 	exit $?
 	;;
 pydeps)
-	test -z "$PYDEPS" || pip -q install --user $PYDEPS
+	test -z "$PYDEPS" || pip3 -q install --user $PYDEPS
 	exit $?
 	;;
 build-deps)
@@ -440,7 +459,7 @@ sonarcloud)
 		-Dsonar.projectKey=${SONAR_PROJECT} \
 		-Dsonar.organization=${SONAR_ORGANIZATION} \
 		-Dsonar.login=${SONAR_TOKEN} \
-		-Dsonar.projectVersion=$(git describe)+${BUILD_NUMBER} \
+		-Dsonar.projectVersion=$(git describe --exclude 'android-*')+${BUILD_NUMBER} \
 		-Dsonar.sources=. \
 		-Dsonar.cfamily.threads=2 \
 		-Dsonar.cfamily.cache.enabled=true \

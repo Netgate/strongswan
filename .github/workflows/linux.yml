@@ -44,7 +44,6 @@ jobs:
           - test: apidoc
           - test: coverage
           - test: dist
-          - test: nm
           - test: nm-no-glib
           - test: fuzzing
             compiler: clang
@@ -63,9 +62,8 @@ jobs:
           # builds and, similarly, builds with leak-detective only differ in two
           # files (LD itself and library.c); but different tests build different
           # dependencies, so different caches are needed
-          key: ccache-${{ runner.os }}-${{ env.CC }}-${{ matrix.test }}-${{ github.ref }}:${{ github.sha }}
+          key: ccache-${{ runner.os }}-${{ env.CC }}-${{ matrix.test }}-${{ github.sha }}
           restore-keys: |
-            ccache-${{ runner.os }}-${{ env.CC }}-${{ matrix.test }}-${{ github.ref }}:
             ccache-${{ runner.os }}-${{ env.CC }}-${{ matrix.test }}-
             ccache-${{ runner.os }}-${{ env.CC }}-
       - run: |
@@ -99,13 +97,11 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: ~/.ccache
-          key: ccache-${{ runner.os }}-${{ env.CC }}-${{ matrix.test }}-${{ github.ref }}:${{ github.sha }}
+          key: ccache-${{ runner.os }}-${{ env.CC }}-${{ matrix.test }}-${{ github.sha }}
           restore-keys: |
-            ccache-${{ runner.os }}-${{ env.CC }}-${{ matrix.test }}-${{ github.ref }}:
             ccache-${{ runner.os }}-${{ env.CC }}-${{ matrix.test }}-
             ccache-${{ runner.os }}-${{ env.CC }}-
-            ccache-${{ runner.os }}-${{ env.CC }}-all-${{ github.ref }}:${{ github.sha }}
-            ccache-${{ runner.os }}-${{ env.CC }}-all-${{ github.ref }}:
+            ccache-${{ runner.os }}-${{ env.CC }}-all-${{ github.sha }}
             ccache-${{ runner.os }}-${{ env.CC }}-all-
             ccache-${{ runner.os }}-${{ env.CC }}-
       - run: |
@@ -121,35 +117,30 @@ jobs:
           path: config.log
           retention-days: 5
 
-  xenial:
+  bionic:
     needs: pre-check
     if: ${{ needs.pre-check.outputs.should_skip != 'true' }}
-    runs-on: ubuntu-16.04
+    runs-on: ubuntu-18.04
     strategy:
       matrix:
         test: [ all ]
         compiler: [ gcc, clang ]
         include:
-          - test: openssl-1.0
-          - test: openssl-1.0
-            leak-detective: yes
+          - test: nm
     env:
       LEAK_DETECTIVE: ${{ matrix.leak-detective || 'no' }}
       CC: ${{ matrix.compiler || 'gcc' }}
       TEST: ${{ matrix.test }}
-      UBUNTU_XENIAL: yes
-      # this is the default with newer versions and fixes builds with clang
-      CCACHE_CPP2: true
+      UBUNTU_BIONIC: yes
     steps:
       - uses: actions/checkout@v2
       - uses: actions/cache@v2
         with:
           path: ~/.ccache
-          key: ccache-xenial-${{ env.CC }}-${{ matrix.test }}-${{ github.ref }}:${{ github.sha }}
+          key: ccache-bionic-${{ env.CC }}-${{ matrix.test }}-${{ github.sha }}
           restore-keys: |
-            ccache-xenial-${{ env.CC }}-${{ matrix.test }}-${{ github.ref }}:
-            ccache-xenial-${{ env.CC }}-${{ matrix.test }}-
-            ccache-xenial-${{ env.CC }}-
+            ccache-bionic-${{ env.CC }}-${{ matrix.test }}-
+            ccache-bionic-${{ env.CC }}-
       - run: |
           sudo apt-get install -qq ccache
           echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV
