@@ -1,9 +1,8 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * HSR Hochschule fuer Technik Rapperswil
- *
  * Copyright (C) 2013 Martin Willi
- * Copyright (C) 2013 revosec AG
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -388,6 +387,8 @@ static child_cfg_t* create_child_cfg(private_cmd_connection_t *this,
 			case TS_IPV6_ADDR_RANGE:
 				has_v6 = TRUE;
 				break;
+			default:
+				continue;
 		}
 		child_cfg->add_traffic_selector(child_cfg, FALSE, ts);
 	}

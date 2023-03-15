@@ -1,7 +1,8 @@
 /*
  * Copyright (C) 2012-2014 Tobias Brunner
  * Copyright (C) 2008 Martin Willi
- * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -1042,9 +1043,9 @@ static action_t map_action(int starter_action)
 	switch (starter_action)
 	{
 		case 2: /* =hold */
-			return ACTION_ROUTE;
+			return ACTION_TRAP;
 		case 3: /* =restart */
-			return ACTION_RESTART;
+			return ACTION_START;
 		default:
 			return ACTION_NONE;
 	}

@@ -3,7 +3,8 @@
  * Copyright (C) 2016 Andreas Steffen
  * Copyright (C) 2005-2007 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,10 +23,10 @@
 
 #include <daemon.h>
 
-ENUM(action_names, ACTION_NONE, ACTION_RESTART,
-	"clear",
-	"hold",
-	"restart",
+ENUM_FLAGS(action_names, ACTION_TRAP, ACTION_START,
+	"none",
+	"trap",
+	"start",
 );
 
 /** Default replay window size, if not set using charon.replay_window */
@@ -144,6 +145,16 @@ struct private_child_cfg_t {
 	mark_t set_mark_out;
 
 	/**
+	 * Optional security label for policies
+	 */
+	sec_label_t *label;
+
+	/**
+	 * Optional label mode for policies
+	 */
+	sec_label_mode_t label_mode;
+
+	/**
 	 * Traffic Flow Confidentiality padding, if enabled
 	 */
 	uint32_t tfc;
@@ -205,16 +216,16 @@ CALLBACK(match_proposal, bool,
 }
 
 METHOD(child_cfg_t, get_proposals, linked_list_t*,
-	private_child_cfg_t *this, bool strip_dh)
+	private_child_cfg_t *this, bool strip_ke)
 {
 	enumerator_t *enumerator;
 	proposal_t *current;
 	proposal_selection_flag_t flags = 0;
 	linked_list_t *proposals = linked_list_create();
 
-	if (strip_dh)
+	if (strip_ke)
 	{
-		flags |= PROPOSAL_SKIP_DH;
+		flags |= PROPOSAL_SKIP_KE;
 	}
 
 	enumerator = this->proposals->create_enumerator(this->proposals);
@@ -287,6 +298,12 @@ METHOD(child_cfg_t, get_traffic_selectors, linked_list_t*,
 				e2 = hosts->create_enumerator(hosts);
 				while (e2->enumerate(e2, &host))
 				{
+					if (!dynamic && !host->is_anyaddr(host) &&
+						!ts1->includes(ts1, host))
+					{	/* for transport mode, we skip TS that don't match
+						 * specific IPs */
+						continue;
+					}
 					ts2 = ts1->clone(ts1);
 					if (dynamic || !host->is_anyaddr(host))
 					{	/* don't make regular TS larger than they were */
@@ -473,23 +490,23 @@ METHOD(child_cfg_t, get_close_action, action_t,
 	return this->close_action;
 }
 
-METHOD(child_cfg_t, get_dh_group, diffie_hellman_group_t,
-	private_child_cfg_t *this)
+METHOD(child_cfg_t, get_algorithm, uint16_t,
+	private_child_cfg_t *this, transform_type_t type)
 {
 	enumerator_t *enumerator;
 	proposal_t *proposal;
-	uint16_t dh_group = MODP_NONE;
+	uint16_t alg = 0;
 
 	enumerator = this->proposals->create_enumerator(this->proposals);
 	while (enumerator->enumerate(enumerator, &proposal))
 	{
-		if (proposal->get_algorithm(proposal, DIFFIE_HELLMAN_GROUP, &dh_group, NULL))
+		if (proposal->get_algorithm(proposal, type, &alg, NULL))
 		{
 			break;
 		}
 	}
 	enumerator->destroy(enumerator);
-	return dh_group;
+	return alg;
 }
 
 METHOD(child_cfg_t, get_inactivity, uint32_t,
@@ -520,6 +537,97 @@ METHOD(child_cfg_t, get_set_mark, mark_t,
 	private_child_cfg_t *this, bool inbound)
 {
 	return inbound ? this->set_mark_in : this->set_mark_out;
+}
+
+METHOD(child_cfg_t, get_label, sec_label_t*,
+	private_child_cfg_t *this)
+{
+	return this->label;
+}
+
+METHOD(child_cfg_t, get_label_mode, sec_label_mode_t,
+	private_child_cfg_t *this)
+{
+	return this->label_mode;
+}
+
+METHOD(child_cfg_t, select_label, bool,
+	private_child_cfg_t *this, linked_list_t *labels, bool log,
+	sec_label_t **label, bool *exact_out)
+{
+	enumerator_t *enumerator;
+	sec_label_t *current, *match = NULL;
+	bool exact = FALSE;
+
+	if (labels && labels->get_count(labels))
+	{
+		if (!this->label)
+		{
+			DBG2(DBG_CFG, "peer proposed a security label, but none expected");
+			return FALSE;
+		}
+		if (log)
+		{
+			DBG2(DBG_CFG, "selecting security label matching '%s':",
+				 this->label->get_string(this->label));
+		}
+		enumerator = labels->create_enumerator(labels);
+		while (enumerator->enumerate(enumerator, &current))
+		{
+			if (this->label->equals(this->label, current))
+			{
+				if (log)
+				{
+					DBG2(DBG_CFG, " %s => matches exactly",
+						 current->get_string(current));
+				}
+				match = current;
+				exact = TRUE;
+				break;
+			}
+			else if (this->label_mode == SEC_LABEL_MODE_SELINUX &&
+					 this->label->matches(this->label, current))
+			{
+				if (log)
+				{
+					DBG2(DBG_CFG, " %s => matches%s",
+						 current->get_string(current), match ? ", ignored" : "");
+				}
+				/* return the first match if we don't find an exact one */
+				if (!match)
+				{
+					match = current;
+				}
+			}
+			else if (log)
+			{
+				DBG2(DBG_CFG, " %s => no match", current->get_string(current));
+			}
+		}
+		enumerator->destroy(enumerator);
+		if (!match)
+		{
+			DBG2(DBG_CFG, "none of the proposed security labels match the "
+				 "configured label '%s'", this->label->get_string(this->label));
+			return FALSE;
+		}
+	}
+	else if (this->label)
+	{
+		DBG2(DBG_CFG, "peer didn't propose any security labels, we expect one "
+			 "matching '%s'", this->label->get_string(this->label));
+		return FALSE;
+	}
+
+	if (label)
+	{
+		*label = match;
+	}
+	if (exact_out)
+	{
+		*exact_out = exact;
+	}
+	return TRUE;
 }
 
 METHOD(child_cfg_t, get_tfc, uint32_t,
@@ -607,7 +715,9 @@ METHOD(child_cfg_t, equals, bool,
 		this->hw_offload == other->hw_offload &&
 		this->copy_dscp == other->copy_dscp &&
 		streq(this->updown, other->updown) &&
-		streq(this->interface, other->interface);
+		streq(this->interface, other->interface) &&
+		sec_labels_equal(this->label, other->label) &&
+		this->label_mode == other->label_mode;
 }
 
 METHOD(child_cfg_t, get_ref, child_cfg_t*,
@@ -625,6 +735,7 @@ METHOD(child_cfg_t, destroy, void,
 		this->proposals->destroy_offset(this->proposals, offsetof(proposal_t, destroy));
 		this->my_ts->destroy_offset(this->my_ts, offsetof(traffic_selector_t, destroy));
 		this->other_ts->destroy_offset(this->other_ts, offsetof(traffic_selector_t, destroy));
+		DESTROY_IF(this->label);
 		free(this->updown);
 		free(this->interface);
 		free(this->name);
@@ -653,12 +764,15 @@ child_cfg_t *child_cfg_create(char *name, child_cfg_create_t *data)
 			.get_dpd_action = _get_dpd_action,
 			.get_close_action = _get_close_action,
 			.get_lifetime = _get_lifetime,
-			.get_dh_group = _get_dh_group,
+			.get_algorithm = _get_algorithm,
 			.get_inactivity = _get_inactivity,
 			.get_reqid = _get_reqid,
 			.get_if_id = _get_if_id,
 			.get_mark = _get_mark,
 			.get_set_mark = _get_set_mark,
+			.get_label = _get_label,
+			.get_label_mode = _get_label_mode,
+			.select_label = _select_label,
 			.get_tfc = _get_tfc,
 			.get_manual_prio = _get_manual_prio,
 			.get_interface = _get_interface,
@@ -685,6 +799,9 @@ child_cfg_t *child_cfg_create(char *name, child_cfg_create_t *data)
 		.mark_out = data->mark_out,
 		.set_mark_in = data->set_mark_in,
 		.set_mark_out = data->set_mark_out,
+		.label = data->label ? data->label->clone(data->label) : NULL,
+		.label_mode = data->label_mode != SEC_LABEL_MODE_SYSTEM ?
+								data->label_mode : sec_label_mode_default(),
 		.lifetime = data->lifetime,
 		.inactivity = data->inactivity,
 		.tfc = data->tfc,

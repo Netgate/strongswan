@@ -3,7 +3,8 @@
  * Copyright (C) 2016 Andreas Steffen
  * Copyright (C) 2005-2007 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -40,11 +41,11 @@ typedef struct child_cfg_create_t child_cfg_create_t;
  */
 enum action_t {
 	/** No action */
-	ACTION_NONE,
-	/** Route config to establish or reestablish on demand */
-	ACTION_ROUTE,
-	/** Start or restart config immediately */
-	ACTION_RESTART,
+	ACTION_NONE = 0,
+	/** Install trap policy to (re-)establish on demand */
+	ACTION_TRAP = (1<<0),
+	/** Start or restart immediately */
+	ACTION_START = (1<<1),
 };
 
 /**
@@ -88,10 +89,10 @@ struct child_cfg_t {
 	 *
 	 * Resulting list and all of its proposals must be freed after use.
 	 *
-	 * @param strip_dh		TRUE strip out diffie hellman groups
+	 * @param strip_ke		TRUE strip out key exchange methods
 	 * @return				list of proposals
 	 */
-	linked_list_t* (*get_proposals)(child_cfg_t *this, bool strip_dh);
+	linked_list_t* (*get_proposals)(child_cfg_t *this, bool strip_ke);
 
 	/**
 	 * Select a proposal from a supplied list.
@@ -203,11 +204,16 @@ struct child_cfg_t {
 	action_t (*get_close_action) (child_cfg_t *this);
 
 	/**
-	 * Get the DH group to use for CHILD_SA setup.
+	 * Get the first algorithm of a certain transform type that's contained in
+	 * any of the configured proposals.
 	 *
-	 * @return				dh group to use
+	 * For instance, use with KEY_EXCHANGE_METHOD to get the KE method to use
+	 * for the CHILD_SA initiation.
+	 *
+	 * @param type			transform type to look for
+	 * @return				algorithm identifier (0 for none)
 	 */
-	diffie_hellman_group_t (*get_dh_group)(child_cfg_t *this);
+	uint16_t (*get_algorithm)(child_cfg_t *this, transform_type_t type);
 
 	/**
 	 * Get the inactivity timeout value.
@@ -246,6 +252,41 @@ struct child_cfg_t {
 	 * @return				mark
 	 */
 	mark_t (*get_set_mark)(child_cfg_t *this, bool inbound);
+
+	/**
+	 * Optional security label to be configured on policies.
+	 *
+	 * @return				label or NULL
+	 */
+	sec_label_t *(*get_label)(child_cfg_t *this);
+
+	/**
+	 * Get the mode in which the security label is used.
+	 *
+	 * @return				label mode (never SEC_LABEL_MODE_SYSTEM)
+	 */
+	sec_label_mode_t (*get_label_mode)(child_cfg_t *this);
+
+	/**
+	 * Select a security label from the given list that matches the configured
+	 * label.
+	 *
+	 * This fails under the following conditions:
+	 * - a label is configured but no labels are provided
+	 * - no label is configured but at least one label is provided
+	 * - the configured and provided labels don't match
+	 *
+	 * If no label is configured and none are provided, that's considered a
+	 * success and label will be set to NULL.
+	 *
+	 * @param labels		list of labels to match
+	 * @param log			FALSE to avoid logging details about the selection
+	 * @param label[out]	selected label or NULL if no label necessary
+	 * @param exact[out]	TRUE if there was an exact match
+	 * @return				FALSE on failure
+	 */
+	bool (*select_label)(child_cfg_t *this, linked_list_t *labels, bool log,
+						 sec_label_t **label, bool *exact);
 
 	/**
 	 * Get the TFC padding value to use for CHILD_SA.
@@ -367,6 +408,10 @@ struct child_cfg_create_t {
 	mark_t set_mark_in;
 	/** Optional outbound mark the SA should apply to traffic */
 	mark_t set_mark_out;
+	/** Optional security label configured on policies (cloned) */
+	sec_label_t *label;
+	/** Optional security label mode */
+	sec_label_mode_t label_mode;
 	/** Mode to propose for CHILD_SA */
 	ipsec_mode_t mode;
 	/** TFC padding size, 0 to disable, -1 to pad to PMTU */

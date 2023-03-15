@@ -2,7 +2,8 @@
  * Copyright (C) 2010-2020 Tobias Brunner
  * Copyright (C) 2012 Giuliano Grassi
  * Copyright (C) 2012 Ralf Sager
- * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -801,8 +802,8 @@ static job_requeue_t initiate(private_android_service_t *this)
 			},
 		},
 		.mode = MODE_TUNNEL,
-		.dpd_action = ACTION_RESTART,
-		.close_action = ACTION_RESTART,
+		.dpd_action = ACTION_START,
+		.close_action = ACTION_START,
 	};
 	char *type, *remote_id;
 
@@ -924,7 +925,7 @@ static job_requeue_t initiate(private_android_service_t *this)
 
 	/* get an additional reference because initiate consumes one */
 	child_cfg->get_ref(child_cfg);
-	if (ike_sa->initiate(ike_sa, child_cfg, 0, NULL, NULL) != SUCCESS)
+	if (ike_sa->initiate(ike_sa, child_cfg, NULL) != SUCCESS)
 	{
 		DBG1(DBG_CFG, "failed to initiate tunnel");
 		charon->ike_sa_manager->checkin_and_destroy(charon->ike_sa_manager,

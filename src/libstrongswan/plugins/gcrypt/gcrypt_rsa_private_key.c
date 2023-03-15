@@ -1,7 +1,8 @@
 /*
  * Copyright (C) 2017 Tobias Brunner
  * Copyright (C) 2005-2009 Martin Willi
- * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -281,8 +282,8 @@ METHOD(private_key_t, decrypt, bool,
 	void *params, chunk_t encrypted, chunk_t *plain)
 {
 	gcry_error_t err;
-	gcry_sexp_t in, out;
-	chunk_t label = chunk_empty, decrypted;
+	gcry_sexp_t in, out = NULL;
+	chunk_t label = chunk_empty, decrypted = chunk_empty;
 	u_char *sexp;
 
 	switch (scheme)

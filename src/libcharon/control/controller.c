@@ -1,8 +1,8 @@
 /*
  * Copyright (C) 2011-2019 Tobias Brunner
  * Copyright (C) 2007-2011 Martin Willi
- * Copyright (C) 2011 revosec AG
- * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -473,7 +473,7 @@ METHOD(job_t, initiate_execute, job_requeue_t,
 		}
 	}
 
-	if (ike_sa->initiate(ike_sa, listener->child_cfg, 0, NULL, NULL) == SUCCESS)
+	if (ike_sa->initiate(ike_sa, listener->child_cfg, NULL) == SUCCESS)
 	{
 		if (!listener->logger.callback)
 		{

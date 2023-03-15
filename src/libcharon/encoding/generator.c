@@ -2,7 +2,8 @@
  * Copyright (C) 2011 Tobias Brunner
  * Copyright (C) 2005-2009 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -205,7 +206,6 @@ static void generate_u_int_type(private_generator_t *this,
 		case U_INT_4:
 			number_of_bits = 4;
 			break;
-		case TS_TYPE:
 		case RESERVED_BYTE:
 		case SPI_SIZE:
 		case U_INT_8:
@@ -281,7 +281,6 @@ static void generate_u_int_type(private_generator_t *this,
 			}
 			break;
 		}
-		case TS_TYPE:
 		case RESERVED_BYTE:
 		case SPI_SIZE:
 		case U_INT_8:
@@ -478,7 +477,6 @@ METHOD(generator_t, generate_payload, void,
 			case IKE_SPI:
 			case RESERVED_BYTE:
 			case SPI_SIZE:
-			case TS_TYPE:
 			case ATTRIBUTE_TYPE:
 			case ATTRIBUTE_LENGTH:
 				generate_u_int_type(this, rules[i].type, rules[i].offset);
@@ -491,7 +489,6 @@ METHOD(generator_t, generate_payload, void,
 				this->header_length_offset = get_offset(this);
 				generate_u_int_type(this, U_INT_32, rules[i].offset);
 				break;
-			case ADDRESS:
 			case SPI:
 			case CHUNK_DATA:
 			case ENCRYPTED_DATA:

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2020 Rubicon Communications, LLC.
+ * Copyright 2016-2022 Rubicon Communications, LLC.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -50,6 +50,7 @@
  * #define IPSEC_CRYPTO_ALG_DES_CBC		10
  */
 #define IPSEC_CRYPTO_ALG_3DES_CBC	11
+#define IPSEC_CRYPTO_ALG_CHACHA20_POLY1305	12
 
 /* integrity algorithms */
 #define IPSEC_INTEG_ALG_NONE		0
@@ -344,6 +345,7 @@ _(ENCR_AES_GCM_ICV16,160,IPSEC_CRYPTO_ALG_AES_GCM_128)	  \
 _(ENCR_AES_GCM_ICV16,224,IPSEC_CRYPTO_ALG_AES_GCM_192)	  \
 _(ENCR_AES_GCM_ICV16,288,IPSEC_CRYPTO_ALG_AES_GCM_256)	  \
 _(ENCR_3DES,192,IPSEC_CRYPTO_ALG_3DES_CBC)	  \
+_(ENCR_CHACHA20_POLY1305,288,IPSEC_CRYPTO_ALG_CHACHA20_POLY1305)	  \
 
 
 static int

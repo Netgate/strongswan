@@ -1,86 +1,159 @@
-etc/strongswan/*							etc/strongswan
-lib/systemd/system/strongswan.service					lib/systemd/system
-lib/systemd/system/strongswan-dataplane.service				lib/systemd/system
-usr/lib/strongswan/libcharon.so.0					usr/lib/strongswan
-usr/lib/strongswan/libcharon.so.0.0.0					usr/lib/strongswan
-usr/lib/strongswan/libtls.so.0						usr/lib/strongswan
-usr/lib/strongswan/libtls.so.0.0.0					usr/lib/strongswan
-usr/lib/strongswan/libpttls.so.0					usr/lib/strongswan
-usr/lib/strongswan/libpttls.so.0.0.0					usr/lib/strongswan
-usr/lib/strongswan/libstrongswan.so.0					usr/lib/strongswan
-usr/lib/strongswan/libstrongswan.so.0.0.0				usr/lib/strongswan
-usr/lib/strongswan/libvici.so.0						usr/lib/strongswan
-usr/lib/strongswan/libvici.so.0.0.0					usr/lib/strongswan
-usr/lib/strongswan/libtpmtss.so.0					usr/lib/strongswan
-usr/lib/strongswan/libtpmtss.so.0.0.0					usr/lib/strongswan
-usr/lib/strongswan/plugins/libstrongswan-aes.so				usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-ctr.so				usr/lib/strongswan/plugins
-#usr/lib/strongswan/plugins/libstrongswan-unity.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-ccm.so				usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-gcm.so				usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-gcrypt.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-attr.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-cmac.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-constraints.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-des.so				usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-dnskey.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-fips-prf.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-gmp.so				usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-hmac.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-kernel-netlink.so		usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-md5.so				usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-nonce.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-openssl.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-pem.so				usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-pgp.so				usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-pkcs1.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-pkcs8.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-pkcs12.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-rc2.so				usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-sshkey.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-pubkey.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-random.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-resolve.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-revocation.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-sha1.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-sha2.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-socket-default.so		usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-stroke.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-updown.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-x509.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-xauth-generic.so		usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-xauth-eap.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-xauth-pam.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-xauth-noauth.so		usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-xcbc.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-md4.so				usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-eap-md5.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-eap-gtc.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-eap-tls.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-eap-ttls.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-eap-peap.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-eap-mschapv2.so		usr/lib/strongswan/plugins
-#usr/lib/strongswan/plugins/libstrongswan-farp.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-dhcp.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-curl.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-eap-identity.so		usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-acert.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-vici.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-curve25519.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-counters.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-mgf1.so			usr/lib/strongswan/plugins
-usr/libexec/strongswan/_copyright					usr/libexec/strongswan
-usr/libexec/strongswan/_updown						usr/libexec/strongswan
-usr/libexec/strongswan/charon						usr/libexec/strongswan
-usr/libexec/strongswan/scepclient					usr/libexec/strongswan
-usr/libexec/strongswan/starter						usr/libexec/strongswan
-usr/libexec/strongswan/stroke						usr/libexec/strongswan
-usr/libexec/strongswan/_imv_policy					usr/libexec/strongswan
-usr/libexec/strongswan/imv_policy_manager				usr/libexec/strongswan
-usr/libexec/strongswan/pki						usr/libexec/strongswan
-usr/libexec/strongswan/aikgen						usr/libexec/strongswan
-usr/sbin/charon-systemd							usr/sbin
-usr/sbin/strongswan							usr/sbin
-usr/sbin/swanctl							usr/sbin
-usr/share/strongswan/templates/config/*					usr/share/strongswan/templates/config
-usr/share/strongswan/templates/database/*				usr/share/strongswan/templates/database
+etc/strongswan/ipsec.conf
+etc/strongswan/ipsec.d/*
+etc/strongswan/strongswan.conf
+etc/strongswan/strongswan.d/aikgen.conf
+etc/strongswan/strongswan.d/attest.conf
+etc/strongswan/strongswan.d/charon
+etc/strongswan/strongswan.d/charon-logging.conf
+etc/strongswan/strongswan.d/charon-systemd.conf
+etc/strongswan/strongswan.d/charon.conf
+etc/strongswan/strongswan.d/charon/acert.conf
+etc/strongswan/strongswan.d/charon/addrblock.conf
+etc/strongswan/strongswan.d/charon/aes.conf
+etc/strongswan/strongswan.d/charon/agent.conf
+etc/strongswan/strongswan.d/charon/attr.conf
+etc/strongswan/strongswan.d/charon/ccm.conf
+etc/strongswan/strongswan.d/charon/cmac.conf
+etc/strongswan/strongswan.d/charon/constraints.conf
+etc/strongswan/strongswan.d/charon/counters.conf
+etc/strongswan/strongswan.d/charon/ctr.conf
+etc/strongswan/strongswan.d/charon/curl.conf
+etc/strongswan/strongswan.d/charon/curve25519.conf
+etc/strongswan/strongswan.d/charon/des.conf
+etc/strongswan/strongswan.d/charon/dhcp.conf
+etc/strongswan/strongswan.d/charon/dnskey.conf
+etc/strongswan/strongswan.d/charon/drbg.conf
+etc/strongswan/strongswan.d/charon/eap-gtc.conf
+etc/strongswan/strongswan.d/charon/eap-identity.conf
+etc/strongswan/strongswan.d/charon/eap-md5.conf
+etc/strongswan/strongswan.d/charon/eap-mschapv2.conf
+etc/strongswan/strongswan.d/charon/eap-peap.conf
+etc/strongswan/strongswan.d/charon/eap-tls.conf
+etc/strongswan/strongswan.d/charon/eap-ttls.conf
+etc/strongswan/strongswan.d/charon/fips-prf.conf
+etc/strongswan/strongswan.d/charon/gcm.conf
+etc/strongswan/strongswan.d/charon/gcrypt.conf
+etc/strongswan/strongswan.d/charon/gmp.conf
+etc/strongswan/strongswan.d/charon/hmac.conf
+etc/strongswan/strongswan.d/charon/kdf.conf
+etc/strongswan/strongswan.d/charon/kernel-netlink.conf
+etc/strongswan/strongswan.d/charon/kernel-vpp.conf
+etc/strongswan/strongswan.d/charon/md4.conf
+etc/strongswan/strongswan.d/charon/md5.conf
+etc/strongswan/strongswan.d/charon/mgf1.conf
+etc/strongswan/strongswan.d/charon/nonce.conf
+etc/strongswan/strongswan.d/charon/openssl.conf
+etc/strongswan/strongswan.d/charon/pem.conf
+etc/strongswan/strongswan.d/charon/pgp.conf
+etc/strongswan/strongswan.d/charon/pkcs1.conf
+etc/strongswan/strongswan.d/charon/pkcs11.conf
+etc/strongswan/strongswan.d/charon/pkcs12.conf
+etc/strongswan/strongswan.d/charon/pkcs7.conf
+etc/strongswan/strongswan.d/charon/pkcs8.conf
+etc/strongswan/strongswan.d/charon/pubkey.conf
+etc/strongswan/strongswan.d/charon/random.conf
+etc/strongswan/strongswan.d/charon/rc2.conf
+etc/strongswan/strongswan.d/charon/resolve.conf
+etc/strongswan/strongswan.d/charon/revocation.conf
+etc/strongswan/strongswan.d/charon/sha1.conf
+etc/strongswan/strongswan.d/charon/sha2.conf
+etc/strongswan/strongswan.d/charon/socket-default.conf
+etc/strongswan/strongswan.d/charon/sshkey.conf
+etc/strongswan/strongswan.d/charon/stroke.conf
+etc/strongswan/strongswan.d/charon/updown.conf
+etc/strongswan/strongswan.d/charon/vici.conf
+etc/strongswan/strongswan.d/charon/x509.conf
+etc/strongswan/strongswan.d/charon/xauth-eap.conf
+etc/strongswan/strongswan.d/charon/xauth-generic.conf
+etc/strongswan/strongswan.d/charon/xauth-noauth.conf
+etc/strongswan/strongswan.d/charon/xauth-pam.conf
+etc/strongswan/strongswan.d/charon/xcbc.conf
+etc/strongswan/strongswan.d/pki.conf
+etc/strongswan/strongswan.d/starter.conf
+etc/strongswan/strongswan.d/swanctl.conf
+etc/strongswan/swanctl/*
+lib/systemd/system/strongswan-dataplane.service
+lib/systemd/system/strongswan.service
+usr/lib/strongswan/libcharon.so.0
+usr/lib/strongswan/libcharon.so.0.0.0
+usr/lib/strongswan/libpttls.so.0
+usr/lib/strongswan/libpttls.so.0.0.0
+usr/lib/strongswan/libstrongswan.so.0
+usr/lib/strongswan/libstrongswan.so.0.0.0
+usr/lib/strongswan/libtls.so.0
+usr/lib/strongswan/libtls.so.0.0.0
+usr/lib/strongswan/libtpmtss.so.0
+usr/lib/strongswan/libtpmtss.so.0.0.0
+usr/lib/strongswan/libvici.so.0
+usr/lib/strongswan/libvici.so.0.0.0
+usr/lib/strongswan/plugins/libstrongswan-acert.so
+usr/lib/strongswan/plugins/libstrongswan-addrblock.so
+usr/lib/strongswan/plugins/libstrongswan-aes.so
+usr/lib/strongswan/plugins/libstrongswan-agent.so
+usr/lib/strongswan/plugins/libstrongswan-attr.so
+usr/lib/strongswan/plugins/libstrongswan-ccm.so
+usr/lib/strongswan/plugins/libstrongswan-cmac.so
+usr/lib/strongswan/plugins/libstrongswan-constraints.so
+usr/lib/strongswan/plugins/libstrongswan-counters.so
+usr/lib/strongswan/plugins/libstrongswan-ctr.so
+usr/lib/strongswan/plugins/libstrongswan-curl.so
+usr/lib/strongswan/plugins/libstrongswan-curve25519.so
+usr/lib/strongswan/plugins/libstrongswan-des.so
+usr/lib/strongswan/plugins/libstrongswan-dhcp.so
+usr/lib/strongswan/plugins/libstrongswan-dnskey.so
+usr/lib/strongswan/plugins/libstrongswan-drbg.so
+usr/lib/strongswan/plugins/libstrongswan-eap-gtc.so
+usr/lib/strongswan/plugins/libstrongswan-eap-identity.so
+usr/lib/strongswan/plugins/libstrongswan-eap-md5.so
+usr/lib/strongswan/plugins/libstrongswan-eap-mschapv2.so
+usr/lib/strongswan/plugins/libstrongswan-eap-peap.so
+usr/lib/strongswan/plugins/libstrongswan-eap-tls.so
+usr/lib/strongswan/plugins/libstrongswan-eap-ttls.so
+usr/lib/strongswan/plugins/libstrongswan-fips-prf.so
+usr/lib/strongswan/plugins/libstrongswan-gcm.so
+usr/lib/strongswan/plugins/libstrongswan-gcrypt.so
+usr/lib/strongswan/plugins/libstrongswan-gmp.so
+usr/lib/strongswan/plugins/libstrongswan-hmac.so
+usr/lib/strongswan/plugins/libstrongswan-kdf.so
+usr/lib/strongswan/plugins/libstrongswan-kernel-netlink.so
+usr/lib/strongswan/plugins/libstrongswan-md4.so
+usr/lib/strongswan/plugins/libstrongswan-md5.so
+usr/lib/strongswan/plugins/libstrongswan-mgf1.so
+usr/lib/strongswan/plugins/libstrongswan-nonce.so
+usr/lib/strongswan/plugins/libstrongswan-openssl.so
+usr/lib/strongswan/plugins/libstrongswan-pem.so
+usr/lib/strongswan/plugins/libstrongswan-pgp.so
+usr/lib/strongswan/plugins/libstrongswan-pkcs1.so
+usr/lib/strongswan/plugins/libstrongswan-pkcs11.so
+usr/lib/strongswan/plugins/libstrongswan-pkcs12.so
+usr/lib/strongswan/plugins/libstrongswan-pkcs7.so
+usr/lib/strongswan/plugins/libstrongswan-pkcs8.so
+usr/lib/strongswan/plugins/libstrongswan-pubkey.so
+usr/lib/strongswan/plugins/libstrongswan-random.so
+usr/lib/strongswan/plugins/libstrongswan-rc2.so
+usr/lib/strongswan/plugins/libstrongswan-resolve.so
+usr/lib/strongswan/plugins/libstrongswan-revocation.so
+usr/lib/strongswan/plugins/libstrongswan-sha1.so
+usr/lib/strongswan/plugins/libstrongswan-sha2.so
+usr/lib/strongswan/plugins/libstrongswan-socket-default.so
+usr/lib/strongswan/plugins/libstrongswan-sshkey.so
+usr/lib/strongswan/plugins/libstrongswan-stroke.so
+usr/lib/strongswan/plugins/libstrongswan-updown.so
+usr/lib/strongswan/plugins/libstrongswan-vici.so
+usr/lib/strongswan/plugins/libstrongswan-x509.so
+usr/lib/strongswan/plugins/libstrongswan-xauth-eap.so
+usr/lib/strongswan/plugins/libstrongswan-xauth-generic.so
+usr/lib/strongswan/plugins/libstrongswan-xauth-noauth.so
+usr/lib/strongswan/plugins/libstrongswan-xauth-pam.so
+usr/lib/strongswan/plugins/libstrongswan-xcbc.so
+usr/libexec/strongswan/_updown
+usr/libexec/strongswan/aikgen
+usr/libexec/strongswan/charon
+usr/libexec/strongswan/pki
+usr/libexec/strongswan/starter
+usr/libexec/strongswan/stroke
+usr/sbin/charon-systemd
+usr/sbin/strongswan
+usr/sbin/swanctl
+usr/share/strongswan/templates/config/*
+usr/share/strongswan/templates/database/*

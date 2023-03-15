@@ -1,28 +1,38 @@
-usr/lib/strongswan/libimcv.so.0						usr/lib/strongswan
-usr/lib/strongswan/libimcv.so.0.0.0					usr/lib/strongswan
-usr/lib/strongswan/libtnccs.so.0					usr/lib/strongswan
-usr/lib/strongswan/libtnccs.so.0.0.0					usr/lib/strongswan
-usr/lib/strongswan/libradius.so.0					usr/lib/strongswan
-usr/lib/strongswan/libradius.so.0.0.0					usr/lib/strongswan
-usr/lib/strongswan/imcvs/imc-attestation.so				usr/lib/strongswan/imcvs
-usr/lib/strongswan/imcvs/imc-scanner.so					usr/lib/strongswan/imcvs
-usr/lib/strongswan/imcvs/imc-test.so					usr/lib/strongswan/imcvs
-usr/lib/strongswan/imcvs/imc-os.so					usr/lib/strongswan/imcvs
-usr/lib/strongswan/imcvs/imv-scanner.so					usr/lib/strongswan/imcvs
-usr/lib/strongswan/imcvs/imv-test.so					usr/lib/strongswan/imcvs
-usr/lib/strongswan/imcvs/imv-os.so					usr/lib/strongswan/imcvs
-usr/lib/strongswan/imcvs/imv-attestation.so				usr/lib/strongswan/imcvs
-usr/lib/strongswan/plugins/libstrongswan-pkcs7.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-sqlite.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-eap-tnc.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-tnc-imc.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-tnc-imv.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-tnc-tnccs.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-tnccs-20.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-tnccs-11.so			usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-tnccs-dynamic.so		usr/lib/strongswan/plugins
-usr/lib/strongswan/plugins/libstrongswan-eap-radius.so			usr/lib/strongswan/plugins
-#usr/lib/strongswan/plugins/libstrongswan-tnc-ifmap.so			usr/lib/strongswan/plugins
-#usr/lib/strongswan/plugins/libstrongswan-tnc-pdp.so			usr/lib/strongswan/plugins
-usr/libexec/strongswan/attest						usr/libexec/strongswan
-usr/libexec/strongswan/pt-tls-client					usr/libexec/strongswan
+etc/strongswan/strongswan.d/charon/eap-radius.conf
+etc/strongswan/strongswan.d/charon/eap-tnc.conf
+etc/strongswan/strongswan.d/charon/sqlite.conf
+etc/strongswan/strongswan.d/charon/tnc-imc.conf
+etc/strongswan/strongswan.d/charon/tnc-imv.conf
+etc/strongswan/strongswan.d/charon/tnc-tnccs.conf
+etc/strongswan/strongswan.d/charon/tnccs-11.conf
+etc/strongswan/strongswan.d/charon/tnccs-20.conf
+etc/strongswan/strongswan.d/charon/tnccs-dynamic.conf
+etc/strongswan/strongswan.d/imcv.conf
+etc/strongswan/strongswan.d/tnc.conf
+usr/lib/strongswan/imcvs/imc-attestation.so
+usr/lib/strongswan/imcvs/imc-os.so
+usr/lib/strongswan/imcvs/imc-scanner.so
+usr/lib/strongswan/imcvs/imc-test.so
+usr/lib/strongswan/imcvs/imv-attestation.so
+usr/lib/strongswan/imcvs/imv-os.so
+usr/lib/strongswan/imcvs/imv-scanner.so
+usr/lib/strongswan/imcvs/imv-test.so
+usr/lib/strongswan/libimcv.so.0
+usr/lib/strongswan/libimcv.so.0.0.0
+usr/lib/strongswan/libradius.so.0
+usr/lib/strongswan/libradius.so.0.0.0
+usr/lib/strongswan/libtnccs.so.0
+usr/lib/strongswan/libtnccs.so.0.0.0
+usr/lib/strongswan/plugins/libstrongswan-eap-radius.so
+usr/lib/strongswan/plugins/libstrongswan-eap-tnc.so
+usr/lib/strongswan/plugins/libstrongswan-sqlite.so
+usr/lib/strongswan/plugins/libstrongswan-tnc-imc.so
+usr/lib/strongswan/plugins/libstrongswan-tnc-imv.so
+usr/lib/strongswan/plugins/libstrongswan-tnc-tnccs.so
+usr/lib/strongswan/plugins/libstrongswan-tnccs-11.so
+usr/lib/strongswan/plugins/libstrongswan-tnccs-20.so
+usr/lib/strongswan/plugins/libstrongswan-tnccs-dynamic.so
+usr/libexec/strongswan/_imv_policy
+usr/libexec/strongswan/attest
+usr/libexec/strongswan/imv_policy_manager
+usr/libexec/strongswan/pt-tls-client

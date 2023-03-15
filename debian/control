@@ -3,7 +3,7 @@ Section: net
 Priority: extra
 Maintainer: Netgate <support@netgate.com>
 Standards-Version: 3.9.2
-Build-Depends: debhelper (>= 7.0.0), libssl-dev (>= 0.9.8), libcap-dev, libcurl4-openssl-dev, libldap2-dev, libmysqlclient-dev, libsqlite3-dev, gperf, libgmp-dev, libxml2-dev, libtspi-dev, libgcrypt20-dev
+Build-Depends: debhelper (>= 7.0.0), libssl-dev (>= 0.9.8), libcap-dev, libcurl4-openssl-dev, libldap2-dev, libmysqlclient-dev, libsqlite3-dev, gperf, libgmp-dev, libxml2-dev, libtspi-dev, libgcrypt20-dev, libsystemd-dev, libpam0g-dev
 Homepage: http://www.strongswan.org
 
 Package: netgate-strongswan

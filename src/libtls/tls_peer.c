@@ -2,10 +2,9 @@
  * Copyright (C) 2020 Tobias Brunner
  * Copyright (C) 2020-2021 Pascal Knecht
  * Copyright (C) 2020 Méline Sieber
- * HSR Hochschule fuer Technik Rapperswil
- *
  * Copyright (C) 2010 Martin Willi
- * Copyright (C) 2010 revosec AG
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,7 +20,6 @@
 #include "tls_peer.h"
 
 #include <utils/debug.h>
-#include <credentials/certificates/x509.h>
 
 #include <time.h>
 
@@ -93,6 +91,11 @@ struct private_tls_peer_t {
 	peer_state_t state;
 
 	/**
+	 *  Received a certificate request from server
+	 */
+	 bool certreq_received;
+
+	/**
 	 * TLS version we offered in hello
 	 */
 	tls_version_t hello_version;
@@ -125,7 +128,7 @@ struct private_tls_peer_t {
 	/**
 	 * DHE exchange
 	 */
-	diffie_hellman_t *dh;
+	key_exchange_t *dh;
 
 	/**
 	 * Requested DH group
@@ -164,8 +167,8 @@ struct private_tls_peer_t {
 };
 
 /* Implemented in tls_server.c */
-bool tls_write_key_share(bio_writer_t **key_share, diffie_hellman_t *dh);
-public_key_t *tls_find_public_key(auth_cfg_t *peer_auth);
+bool tls_write_key_share(bio_writer_t **key_share, key_exchange_t *dh);
+public_key_t *tls_find_public_key(auth_cfg_t *peer_auth, identification_t *id);
 
 /**
  * Verify the DH group/key type requested by the server is valid.
@@ -174,7 +177,7 @@ static bool verify_requested_key_type(private_tls_peer_t *this,
 									  uint16_t key_type)
 {
 	enumerator_t *enumerator;
-	diffie_hellman_group_t group, found = MODP_NONE;
+	key_exchange_method_t group, found = KE_NONE;
 	tls_named_group_t curve;
 
 	enumerator = this->crypto->create_ec_enumerator(this->crypto);
@@ -188,12 +191,12 @@ static bool verify_requested_key_type(private_tls_peer_t *this,
 	}
 	enumerator->destroy(enumerator);
 
-	if (found == MODP_NONE)
+	if (found == KE_NONE)
 	{
 		DBG1(DBG_TLS, "server requested key exchange we didn't propose");
 		return FALSE;
 	}
-	if (this->dh->get_dh_group(this->dh) == found)
+	if (this->dh->get_method(this->dh) == found)
 	{
 		DBG1(DBG_TLS, "server requested key exchange we already use");
 		return FALSE;
@@ -428,7 +431,7 @@ static status_t process_server_hello(private_tls_peer_t *this,
 			key_share = chunk_skip(key_share, 1);
 		}
 		if (!key_share.len ||
-			!this->dh->set_other_public_value(this->dh, key_share) ||
+			!this->dh->set_public_key(this->dh, key_share) ||
 			!this->dh->get_shared_secret(this->dh, &shared_secret) ||
 			!this->crypto->derive_handshake_keys(this->crypto, shared_secret))
 		{
@@ -510,42 +513,6 @@ static status_t process_encrypted_extensions(private_tls_peer_t *this,
 }
 
 /**
- * Check if a server certificate is acceptable for the given server identity
- */
-static bool check_certificate(private_tls_peer_t *this, certificate_t *cert)
-{
-	identification_t *id;
-
-	if (cert->has_subject(cert, this->server))
-	{
-		return TRUE;
-	}
-	id = cert->get_subject(cert);
-	if (id->matches(id, this->server))
-	{
-		return TRUE;
-	}
-	if (cert->get_type(cert) == CERT_X509)
-	{
-		x509_t *x509 = (x509_t*)cert;
-		enumerator_t *enumerator;
-
-		enumerator = x509->create_subjectAltName_enumerator(x509);
-		while (enumerator->enumerate(enumerator, &id))
-		{
-			if (id->matches(id, this->server))
-			{
-				enumerator->destroy(enumerator);
-				return TRUE;
-			}
-		}
-		enumerator->destroy(enumerator);
-	}
-	DBG1(DBG_TLS, "server certificate does not match to '%Y'", this->server);
-	return FALSE;
-}
-
-/**
  * Process a Certificate message
  */
 static status_t process_certificate(private_tls_peer_t *this,
@@ -591,8 +558,10 @@ static status_t process_certificate(private_tls_peer_t *this,
 		{
 			if (first)
 			{
-				if (!check_certificate(this, cert))
+				if (!cert->has_subject(cert, this->server))
 				{
+					DBG1(DBG_TLS, "server certificate does not match to '%Y'",
+						 this->server);
 					cert->destroy(cert);
 					certs->destroy(certs);
 					this->alert->add(this->alert, TLS_FATAL, TLS_ACCESS_DENIED);
@@ -641,7 +610,7 @@ static status_t process_cert_verify(private_tls_peer_t *this,
 	public_key_t *public;
 	chunk_t msg;
 
-	public = tls_find_public_key(this->server_auth);
+	public = tls_find_public_key(this->server_auth, this->server);
 	if (!public)
 	{
 		DBG1(DBG_TLS, "no trusted certificate found for '%Y' to verify TLS server",
@@ -690,7 +659,7 @@ static status_t process_modp_key_exchange(private_tls_peer_t *this,
 		this->alert->add(this->alert, TLS_FATAL, TLS_INTERNAL_ERROR);
 		return NEED_MORE;
 	}
-	public = tls_find_public_key(this->server_auth);
+	public = tls_find_public_key(this->server_auth, this->server);
 	if (!public)
 	{
 		DBG1(DBG_TLS, "no TLS public key found for server '%Y'", this->server);
@@ -712,7 +681,7 @@ static status_t process_modp_key_exchange(private_tls_peer_t *this,
 	public->destroy(public);
 	free(chunk.ptr);
 
-	this->dh = lib->crypto->create_dh(lib->crypto, MODP_CUSTOM,
+	this->dh = lib->crypto->create_ke(lib->crypto, MODP_CUSTOM,
 									  generator, prime);
 	if (!this->dh)
 	{
@@ -720,7 +689,7 @@ static status_t process_modp_key_exchange(private_tls_peer_t *this,
 		this->alert->add(this->alert, TLS_FATAL, TLS_INTERNAL_ERROR);
 		return NEED_MORE;
 	}
-	if (!this->dh->set_other_public_value(this->dh, pub))
+	if (!this->dh->set_public_key(this->dh, pub))
 	{
 		DBG1(DBG_TLS, "applying DH public value failed");
 		this->alert->add(this->alert, TLS_FATAL, TLS_INTERNAL_ERROR);
@@ -734,10 +703,10 @@ static status_t process_modp_key_exchange(private_tls_peer_t *this,
 /**
  * Get the EC group for a TLS named curve
  */
-static diffie_hellman_group_t curve_to_ec_group(private_tls_peer_t *this,
-												tls_named_group_t curve)
+static key_exchange_method_t curve_to_ec_group(private_tls_peer_t *this,
+											   tls_named_group_t curve)
 {
-	diffie_hellman_group_t group;
+	key_exchange_method_t group;
 	tls_named_group_t current;
 	enumerator_t *enumerator;
 
@@ -760,7 +729,7 @@ static diffie_hellman_group_t curve_to_ec_group(private_tls_peer_t *this,
 static status_t process_ec_key_exchange(private_tls_peer_t *this,
 										bio_reader_t *reader)
 {
-	diffie_hellman_group_t group;
+	key_exchange_method_t group;
 	public_key_t *public;
 	uint8_t type;
 	uint16_t curve;
@@ -797,7 +766,7 @@ static status_t process_ec_key_exchange(private_tls_peer_t *this,
 		return NEED_MORE;
 	}
 
-	public = tls_find_public_key(this->server_auth);
+	public = tls_find_public_key(this->server_auth, this->server);
 	if (!public)
 	{
 		DBG1(DBG_TLS, "no TLS public key found for server '%Y'", this->server);
@@ -819,11 +788,11 @@ static status_t process_ec_key_exchange(private_tls_peer_t *this,
 	public->destroy(public);
 	free(chunk.ptr);
 
-	this->dh = lib->crypto->create_dh(lib->crypto, group);
+	this->dh = lib->crypto->create_ke(lib->crypto, group);
 	if (!this->dh)
 	{
 		DBG1(DBG_TLS, "DH group %N not supported",
-			 diffie_hellman_group_names, group);
+			 key_exchange_method_names, group);
 		this->alert->add(this->alert, TLS_FATAL, TLS_INTERNAL_ERROR);
 		return NEED_MORE;
 	}
@@ -841,7 +810,7 @@ static status_t process_ec_key_exchange(private_tls_peer_t *this,
 		pub = chunk_skip(pub, 1);
 	}
 
-	if (!this->dh->set_other_public_value(this->dh, pub))
+	if (!this->dh->set_public_key(this->dh, pub))
 	{
 		DBG1(DBG_TLS, "applying DH public value failed");
 		this->alert->add(this->alert, TLS_FATAL, TLS_INTERNAL_ERROR);
@@ -858,20 +827,20 @@ static status_t process_ec_key_exchange(private_tls_peer_t *this,
 static status_t process_key_exchange(private_tls_peer_t *this,
 									 bio_reader_t *reader)
 {
-	diffie_hellman_group_t group;
+	key_exchange_method_t group;
 
 	this->crypto->append_handshake(this->crypto,
 								TLS_SERVER_KEY_EXCHANGE, reader->peek(reader));
 
 	group = this->crypto->get_dh_group(this->crypto);
-	if (group == MODP_NONE)
+	if (group == KE_NONE)
 	{
 		DBG1(DBG_TLS, "received Server Key Exchange, but not required "
 			 "for current suite");
 		this->alert->add(this->alert, TLS_FATAL, TLS_HANDSHAKE_FAILURE);
 		return NEED_MORE;
 	}
-	if (diffie_hellman_group_is_ec(group))
+	if (key_exchange_is_ecdh(group))
 	{
 		return process_ec_key_exchange(this, reader);
 	}
@@ -969,7 +938,6 @@ static status_t process_certreq(private_tls_peer_t *this, bio_reader_t *reader)
 	{
 		/* certificate request context as described in RFC 8446, section 4.3.2 */
 		reader->read_data8(reader, &context);
-
 		reader->read_data16(reader, &ext);
 		extensions = bio_reader_create(ext);
 		while (extensions->remaining(extensions))
@@ -1018,6 +986,7 @@ static status_t process_certreq(private_tls_peer_t *this, bio_reader_t *reader)
 		}
 	extensions->destroy(extensions);
 	}
+	this->certreq_received = TRUE;
 	this->state = STATE_CERTREQ_RECEIVED;
 	return NEED_MORE;
 }
@@ -1284,7 +1253,7 @@ static status_t send_client_hello(private_tls_peer_t *this,
 	tls_cipher_suite_t *suites;
 	bio_writer_t *extensions, *curves = NULL, *versions, *key_share, *signatures;
 	tls_version_t version_max, version_min;
-	diffie_hellman_group_t group;
+	key_exchange_method_t group;
 	tls_named_group_t curve;
 	enumerator_t *enumerator;
 	int count, i, v;
@@ -1372,7 +1341,7 @@ static status_t send_client_hello(private_tls_peer_t *this,
 		}
 		if (!this->dh)
 		{
-			this->dh = lib->crypto->create_dh(lib->crypto, group);
+			this->dh = lib->crypto->create_ke(lib->crypto, group);
 			if (!this->dh)
 			{
 				continue;
@@ -1514,35 +1483,39 @@ static status_t send_certificate(private_tls_peer_t *this,
 
 	version_min = this->tls->get_version_min(this->tls);
 	version_max = this->tls->get_version_max(this->tls);
-	if (!this->hashsig.len)
+
+	if (this->peer)
 	{
-		convert_cert_types(this);
-	}
-	enumerator = tls_create_private_key_enumerator(version_min, version_max,
-												   this->hashsig, this->peer);
-	if (!enumerator || !enumerator->enumerate(enumerator, &key, &auth))
-	{
-		if (!enumerator)
+		if (!this->hashsig.len)
 		{
-			DBG1(DBG_TLS, "no common signature algorithms found");
+			convert_cert_types(this);
+		}
+		enumerator = tls_create_private_key_enumerator(version_min, version_max,
+													   this->hashsig, this->peer);
+		if (!enumerator || !enumerator->enumerate(enumerator, &key, &auth))
+		{
+			if (!enumerator)
+			{
+				DBG1(DBG_TLS, "no common signature algorithms found");
+			}
+			else
+			{
+				DBG1(DBG_TLS, "no usable TLS client certificate found for '%Y'",
+					 this->peer);
+			}
+			this->peer->destroy(this->peer);
+			this->peer = NULL;
 		}
 		else
 		{
-			DBG1(DBG_TLS, "no usable TLS client certificate found for '%Y'",
-				 this->peer);
+			this->private = key->get_ref(key);
+			this->peer_auth->merge(this->peer_auth, auth, FALSE);
 		}
-		this->peer->destroy(this->peer);
-		this->peer = NULL;
+		DESTROY_IF(enumerator);
 	}
-	else
-	{
-		this->private = key->get_ref(key);
-		this->peer_auth->merge(this->peer_auth, auth, FALSE);
-	}
-	DESTROY_IF(enumerator);
 
 	/* certificate request context as described in RFC 8446, section 4.4.2 */
-	if (this->tls->get_version_max(this->tls) > TLS_1_2)
+	if (version_max > TLS_1_2)
 	{
 		writer->write_uint8(writer, 0);
 	}
@@ -1558,11 +1531,12 @@ static status_t send_certificate(private_tls_peer_t *this,
 				 cert->get_subject(cert));
 			certs->write_data24(certs, data);
 			free(data.ptr);
-		}
-		/* extensions see RFC 8446, section 4.4.2 */
-		if (this->tls->get_version_max(this->tls) > TLS_1_2)
-		{
-			certs->write_uint16(certs, 0);
+
+			/* extensions see RFC 8446, section 4.4.2 */
+			if (version_max > TLS_1_2)
+			{
+				certs->write_uint16(certs, 0);
+			}
 		}
 	}
 	enumerator = this->peer_auth->create_enumerator(this->peer_auth);
@@ -1576,6 +1550,12 @@ static status_t send_certificate(private_tls_peer_t *this,
 					 cert->get_subject(cert));
 				certs->write_data24(certs, data);
 				free(data.ptr);
+
+				/* extensions see RFC 8446, section 4.4.2 */
+				if (version_max > TLS_1_2)
+				{
+					certs->write_uint16(certs, 0);
+				}
 			}
 		}
 	}
@@ -1621,7 +1601,7 @@ static status_t send_key_exchange_encrypt(private_tls_peer_t *this,
 		return NEED_MORE;
 	}
 
-	public = tls_find_public_key(this->server_auth);
+	public = tls_find_public_key(this->server_auth, this->server);
 	if (!public)
 	{
 		DBG1(DBG_TLS, "no TLS public key found for server '%Y'", this->server);
@@ -1672,12 +1652,12 @@ static status_t send_key_exchange_dhe(private_tls_peer_t *this,
 	}
 	chunk_clear(&premaster);
 
-	if (!this->dh->get_my_public_value(this->dh, &pub))
+	if (!this->dh->get_public_key(this->dh, &pub))
 	{
 		this->alert->add(this->alert, TLS_FATAL, TLS_INTERNAL_ERROR);
 		return NEED_MORE;
 	}
-	switch (this->dh->get_dh_group(this->dh))
+	switch (this->dh->get_method(this->dh))
 	{
 		case MODP_CUSTOM:
 			writer->write_data16(writer, pub);
@@ -1803,7 +1783,7 @@ METHOD(tls_handshake_t, build, status_t,
 			case STATE_INIT:
 				return send_client_hello(this, type, writer);
 			case STATE_HELLO_DONE:
-				if (this->peer)
+				if (this->peer || this->certreq_received)
 				{
 					return send_certificate(this, type, writer);
 				}
@@ -1840,7 +1820,7 @@ METHOD(tls_handshake_t, build, status_t,
 					return NEED_MORE;
 				}
 				this->crypto->change_cipher(this->crypto, TRUE);
-				if (this->peer)
+				if (this->peer || this->certreq_received)
 				{
 					return send_certificate(this, type, writer);
 				}

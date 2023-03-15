@@ -1,10 +1,9 @@
 /*
- * Copyright (C) 2012-2015 Tobias Brunner
  * Copyright (C) 2016-2019 Andreas Steffen
- * HSR Hochschule fuer Technik Rapperswil
- *
+ * Copyright (C) 2012-2015 Tobias Brunner
  * Copyright (C) 2011 Martin Willi
- * Copyright (C) 2011 revosec AG
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -32,8 +31,9 @@ ENUM(plugin_feature_names, FEATURE_NONE, FEATURE_CUSTOM,
 	"HASHER",
 	"PRF",
 	"XOF",
+	"KDF",
 	"DRBG",
-	"DH",
+	"KE",
 	"RNG",
 	"NONCE_GEN",
 	"PRIVKEY",
@@ -93,11 +93,14 @@ uint32_t plugin_feature_hash(plugin_feature_t *feature)
 		case FEATURE_XOF:
 			data = chunk_from_thing(feature->arg.xof);
 			break;
+		case FEATURE_KDF:
+			data = chunk_from_thing(feature->arg.kdf);
+			break;
 		case FEATURE_DRBG:
 			data = chunk_from_thing(feature->arg.drbg);
 			break;
-		case FEATURE_DH:
-			data = chunk_from_thing(feature->arg.dh_group);
+		case FEATURE_KE:
+			data = chunk_from_thing(feature->arg.ke);
 			break;
 		case FEATURE_PRIVKEY:
 			data = chunk_from_thing(feature->arg.privkey);
@@ -171,10 +174,12 @@ bool plugin_feature_matches(plugin_feature_t *a, plugin_feature_t *b)
 				return a->arg.prf == b->arg.prf;
 			case FEATURE_XOF:
 				return a->arg.xof == b->arg.xof;
+			case FEATURE_KDF:
+				return a->arg.kdf == b->arg.kdf;
 			case FEATURE_DRBG:
 				return a->arg.drbg == b->arg.drbg;
-			case FEATURE_DH:
-				return a->arg.dh_group == b->arg.dh_group;
+			case FEATURE_KE:
+				return a->arg.ke == b->arg.ke;
 			case FEATURE_RNG:
 				return a->arg.rng_quality <= b->arg.rng_quality;
 			case FEATURE_NONCE_GEN:
@@ -232,8 +237,9 @@ bool plugin_feature_equals(plugin_feature_t *a, plugin_feature_t *b)
 			case FEATURE_HASHER:
 			case FEATURE_PRF:
 			case FEATURE_XOF:
+			case FEATURE_KDF:
 			case FEATURE_DRBG:
-			case FEATURE_DH:
+			case FEATURE_KE:
 			case FEATURE_NONCE_GEN:
 			case FEATURE_RESOLVER:
 			case FEATURE_PRIVKEY:
@@ -327,6 +333,13 @@ char* plugin_feature_get_string(plugin_feature_t *feature)
 				return str;
 			}
 			break;
+		case FEATURE_KDF:
+			if (asprintf(&str, "%N:%N", plugin_feature_names, feature->type,
+					key_derivation_function_names, feature->arg.kdf) > 0)
+			{
+				return str;
+			}
+			break;
 		case FEATURE_DRBG:
 			if (asprintf(&str, "%N:%N", plugin_feature_names, feature->type,
 					drbg_type_names, feature->arg.drbg) > 0)
@@ -334,9 +347,9 @@ char* plugin_feature_get_string(plugin_feature_t *feature)
 				return str;
 			}
 			break;
-		case FEATURE_DH:
+		case FEATURE_KE:
 			if (asprintf(&str, "%N:%N", plugin_feature_names, feature->type,
-					diffie_hellman_group_names, feature->arg.dh_group) > 0)
+					key_exchange_method_names, feature->arg.ke) > 0)
 			{
 				return str;
 			}
@@ -399,8 +412,8 @@ char* plugin_feature_get_string(plugin_feature_t *feature)
 		case FEATURE_EAP_SERVER:
 		case FEATURE_EAP_PEER:
 			if (feature->arg.eap.vendor &&
-				asprintf(&str, "%N:%d-%d", plugin_feature_names, feature->type,
-					feature->arg.eap.type, feature->arg.eap.vendor) > 0)
+				asprintf(&str, "%N:%d-%N", plugin_feature_names, feature->type,
+					feature->arg.eap.type, pen_names, feature->arg.eap.vendor) > 0)
 			{
 				return str;
 			}
@@ -472,6 +485,17 @@ bool plugin_feature_load(plugin_t *plugin, plugin_feature_t *feature,
 	name = plugin->get_name(plugin);
 	switch (feature->type)
 	{
+		case FEATURE_NONE:
+		case FEATURE_PRIVKEY_SIGN:
+		case FEATURE_PRIVKEY_DECRYPT:
+		case FEATURE_PUBKEY_VERIFY:
+		case FEATURE_PUBKEY_ENCRYPT:
+		case FEATURE_EAP_SERVER:
+		case FEATURE_EAP_PEER:
+		case FEATURE_XAUTH_SERVER:
+		case FEATURE_XAUTH_PEER:
+		case FEATURE_CUSTOM:
+			break;
 		case FEATURE_CRYPTER:
 			lib->crypto->add_crypter(lib->crypto, feature->arg.crypter.alg,
 								feature->arg.crypter.key_size,
@@ -498,12 +522,16 @@ bool plugin_feature_load(plugin_t *plugin, plugin_feature_t *feature,
 			lib->crypto->add_xof(lib->crypto, feature->arg.xof,
 								name, reg->arg.reg.f);
 			break;
+		case FEATURE_KDF:
+			lib->crypto->add_kdf(lib->crypto, feature->arg.kdf,
+								name, reg->arg.reg.f);
+			break;
 		case FEATURE_DRBG:
 			lib->crypto->add_drbg(lib->crypto, feature->arg.drbg,
 								name, reg->arg.reg.f);
 			break;
-		case FEATURE_DH:
-			lib->crypto->add_dh(lib->crypto, feature->arg.dh_group,
+		case FEATURE_KE:
+			lib->crypto->add_ke(lib->crypto, feature->arg.ke,
 								name, reg->arg.reg.f);
 			break;
 		case FEATURE_RNG:
@@ -547,8 +575,6 @@ bool plugin_feature_load(plugin_t *plugin, plugin_feature_t *feature,
 		case FEATURE_RESOLVER:
 			lib->resolver->add_resolver(lib->resolver, reg->arg.reg.f);
 			break;
-		default:
-			break;
 	}
 	return TRUE;
 }
@@ -574,6 +600,17 @@ bool plugin_feature_unload(plugin_t *plugin, plugin_feature_t *feature,
 	}
 	switch (feature->type)
 	{
+		case FEATURE_NONE:
+		case FEATURE_PRIVKEY_SIGN:
+		case FEATURE_PRIVKEY_DECRYPT:
+		case FEATURE_PUBKEY_VERIFY:
+		case FEATURE_PUBKEY_ENCRYPT:
+		case FEATURE_EAP_SERVER:
+		case FEATURE_EAP_PEER:
+		case FEATURE_XAUTH_SERVER:
+		case FEATURE_XAUTH_PEER:
+		case FEATURE_CUSTOM:
+			break;
 		case FEATURE_CRYPTER:
 			lib->crypto->remove_crypter(lib->crypto, reg->arg.reg.f);
 			break;
@@ -592,11 +629,14 @@ bool plugin_feature_unload(plugin_t *plugin, plugin_feature_t *feature,
 		case FEATURE_XOF:
 			lib->crypto->remove_xof(lib->crypto, reg->arg.reg.f);
 			break;
+		case FEATURE_KDF:
+			lib->crypto->remove_kdf(lib->crypto, reg->arg.reg.f);
+			break;
 		case FEATURE_DRBG:
 			lib->crypto->remove_drbg(lib->crypto, reg->arg.reg.f);
 			break;
-		case FEATURE_DH:
-			lib->crypto->remove_dh(lib->crypto, reg->arg.reg.f);
+		case FEATURE_KE:
+			lib->crypto->remove_ke(lib->crypto, reg->arg.reg.f);
 			break;
 		case FEATURE_RNG:
 			lib->crypto->remove_rng(lib->crypto, reg->arg.reg.f);
@@ -627,8 +667,6 @@ bool plugin_feature_unload(plugin_t *plugin, plugin_feature_t *feature,
 			break;
 		case FEATURE_RESOLVER:
 			lib->resolver->remove_resolver(lib->resolver, reg->arg.reg.f);
-			break;
-		default:
 			break;
 	}
 	return TRUE;

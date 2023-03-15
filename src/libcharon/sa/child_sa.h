@@ -2,7 +2,8 @@
  * Copyright (C) 2006-2019 Tobias Brunner
  * Copyright (C) 2006-2008 Martin Willi
  * Copyright (C) 2006 Daniel Roethlisberger
- * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -29,7 +30,6 @@ typedef struct child_sa_t child_sa_t;
 typedef struct child_sa_create_t child_sa_create_t;
 
 #include <library.h>
-#include <crypto/prf_plus.h>
 #include <encoding/payloads/proposal_substructure.h>
 #include <crypto/proposal/proposal.h>
 #include <config/child_cfg.h>
@@ -370,6 +370,15 @@ struct child_sa_t {
 	uint32_t (*get_if_id)(child_sa_t *this, bool inbound);
 
 	/**
+	 * Get the security label used with this CHILD_SA.
+	 *
+	 * This might be different than the configured label.
+	 *
+	 * @return				security label used with this CHILD_SA
+	 */
+	sec_label_t *(*get_label)(child_sa_t *this);
+
+	/**
 	 * Create an enumerator over traffic selectors of one side.
 	 *
 	 * @param local		TRUE for own traffic selectors, FALSE for remote.
@@ -433,11 +442,13 @@ struct child_sa_t {
 	 * @param integ		integrity key (cloned)
 	 * @param spi		SPI to use, allocated for inbound
 	 * @param cpi		CPI to use, allocated for outbound
+	 * @param initiator	TRUE if initiator of exchange resulting in this SA
 	 * @param tfcv3		TRUE if peer supports ESPv3 TFC
 	 * @return			SUCCESS or FAILED
 	 */
 	status_t (*register_outbound)(child_sa_t *this, chunk_t encr, chunk_t integ,
-								  uint32_t spi, uint16_t cpi, bool tfcv3);
+								  uint32_t spi, uint16_t cpi, bool initiator,
+								  bool tfcv3);
 
 	/**
 	 * Install the outbound policies and, if not already done, the outbound SA
@@ -533,6 +544,8 @@ struct child_sa_create_t {
 	/** Optional default outbound interface ID, if neither if_id_out, nor config
 	 * sets one */
 	uint32_t if_id_out_def;
+	/** Optional security label to apply on SAs (cloned) */
+	sec_label_t *label;
 	/** TRUE to enable UDP encapsulation (NAT traversal) */
 	bool encap;
 };
@@ -546,7 +559,7 @@ struct child_sa_create_t {
  * @param data				data for this CHILD_SA
  * @return					child_sa_t object
  */
-child_sa_t *child_sa_create(host_t *me, host_t *other,	child_cfg_t *config,
+child_sa_t *child_sa_create(host_t *me, host_t *other, child_cfg_t *config,
 							child_sa_create_t *data);
 
 #endif /** CHILD_SA_H_ @}*/

@@ -81,7 +81,7 @@ binary-arch: build install
 		-l$(VPP_DIR)/build-root/install-vpp-native/vpp/lib \
 		-l$(LIBVPPMGMT_DIR)/usr/lib/${DEB_HOST_MULTIARCH} \
 		-l$(LIBTNSRINFRA_DIR)/usr/lib/${DEB_HOST_MULTIARCH}
-	dh_gencontrol -s
+	dh_gencontrol -a
 	dh_md5sums
 	dh_builddeb -s
 

@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2008 Tobias Brunner
- * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -45,6 +46,16 @@
  * @return			TRUE on success, FALSE otherwise
  */
 bool openssl_compute_shared_key(EVP_PKEY *priv, EVP_PKEY *pub, chunk_t *shared);
+
+/**
+ * Calculate a fingerprint from the given key (cached under it).
+ *
+ * @param key		key object
+ * @param type		encoding type
+ * @param fp		allocated fingerprint
+ * @return			TRUE on success, FALSE otherwise
+ */
+bool openssl_fingerprint(EVP_PKEY *key, cred_encoding_type_t type, chunk_t *fp);
 
 /**
  * Creates a hash of a given type of a chunk of data.

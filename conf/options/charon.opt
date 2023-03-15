@@ -28,7 +28,8 @@ charon.accept_unencrypted_mainmode_messages = no
 	example, some SonicWall boxes).
 
 charon.block_threshold = 5
-	Maximum number of half-open IKE_SAs for a single peer IP.
+	Maximum number of half-open IKE_SAs (including unprocessed IKE_SA_INITs)
+	for a single peer IP.
 
 charon.cert_cache = yes
 	Whether relations in validated certificate chains should be cached in
@@ -69,8 +70,13 @@ charon.cisco_unity = no
 charon.close_ike_on_child_failure = no
 	Close the IKE_SA if setup of the CHILD_SA along with IKE_AUTH failed.
 
-charon.cookie_threshold = 10
-	Number of half-open IKE_SAs that activate the cookie mechanism.
+charon.cookie_threshold = 30
+	Number of half-open IKE_SAs (including unprocessed IKE_SA_INITs) that
+	activate the cookie mechanism.
+
+charon.cookie_threshold_ip = 3
+	Number of half-open IKE_SAs (including unprocessed IKE_SA_INITs) for a
+	single peer IP that activate the cookie	mechanism.
 
 charon.crypto_test.bench = no
 	Benchmark crypto algorithms and order them by efficiency.
@@ -249,11 +255,12 @@ charon.leak_detective.detailed = yes
 	Includes source file names and line numbers in leak detective output.
 
 charon.leak_detective.usage_threshold = 10240
-	Threshold in bytes for leaks to be reported (0 to report all).
+	Threshold in bytes for allocations to be included in usage reports (0 to
+	include all).
 
 charon.leak_detective.usage_threshold_count = 0
-	Threshold in number of allocations for leaks to be reported (0 to report
-	all).
+	Threshold in number of allocations for allocations to be included in usage
+	reports (0 to include all).
 
 charon.load
 	Plugins to load in the IKE daemon charon.
@@ -400,6 +407,10 @@ charon.routing_table_prio
 
 charon.rsa_pss = no
 	Whether to use RSA with PSS padding instead of PKCS#1 padding by default.
+
+charon.rsa_pss_trailerfield = no
+	Whether to encode an explicit trailerField value of 0x01 in the RSA-PSS
+	algorithmIdentifier (CONTEXT3) or using the DEFAULT value by omitting it.
 
 charon.send_delay = 0
 	Delay in ms for sending packets, to simulate larger RTT.

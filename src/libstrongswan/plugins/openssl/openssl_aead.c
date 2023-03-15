@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2013-2019 Tobias Brunner
- * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) secunet Security Networks AG
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,8 +15,6 @@
  */
 
 #include <openssl/opensslv.h>
-
-#if OPENSSL_VERSION_NUMBER >= 0x1000100fL
 
 #include "openssl_aead.h"
 
@@ -363,5 +362,3 @@ aead_t *openssl_aead_create(encryption_algorithm_t algo,
 
 	return &this->public;
 }
-
-#endif /* OPENSSL_VERSION_NUMBER */
