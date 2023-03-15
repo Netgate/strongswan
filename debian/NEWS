@@ -1,0 +1,125 @@
+strongswan (5.8.0-1) unstable; urgency=medium
+
+  With 5.8.0, systemd service files for strongSwan have been renamed.
+  The strongswan service file, previously in the strongswan-starter package
+  and associated with the ipsec(8) command, is now called strongswan-starter.
+  The strongswan-swanctl service file in the strongswan-swanctl package and
+  associated to the swanctl (8) command, is now called strongswan.
+  .
+  Thus strongswan.service file has thus been moved from the strongswan-starter
+  to the strongswan-swanctl service and administrator should ensure they're
+  calling the right service for their usage.
+
+ -- Yves-Alexis Perez <corsac@debian.org>  Mon, 26 Aug 2019 16:29:57 +0200
+
+strongswan (5.6.2-1) unstable; urgency=medium
+
+  Starting 5.6.1, several algorithms were removed from the default ESP/AH and
+  IKEv2 proposals in compliance with RFC 8221[1] and RFC 8247[2],
+  respectively.
+  .
+  Removed from the default ESP/AH proposal were the 3DES and Blowfish
+  encryption algorithms and the HMAC-MD5 integrity algorithm.
+  .
+  From the IKEv2 default proposal the HMAC-MD5 integrity algorithm and the
+  MODP-1024 Diffie-Hellman group were removed (the latter is significant for
+  Windows clients in their default configuration).
+  .
+  These algorithms may still be used in custom proposals and MODP-2048 can be
+  enabled manually on Windows 7 clients [3].
+  .
+  [1] https://tools.ietf.org/html/rfc8221
+  [2] https://tools.ietf.org/html/rfc8247
+  [3] https://wiki.strongswan.org/projects/strongswan/wiki/Windows7#AES-256-CBC-and-MODP2048
+
+ -- Yves-Alexis Perez <corsac@debian.org>  Tue, 20 Feb 2018 12:27:00 +0100
+
+strongswan (5.1.2-1) unstable; urgency=medium
+
+  Starting 5.1.2, strongSwan natively support a configuration directory (in
+  /etc/strongswan.d/). This replaces the /etc/strongswan.conf.d/ configuration
+  directly which was added in 5.1.1-1.
+  .
+  More information can be found on the strongswan.d configuration mechanism on
+  the upstream commit [1] and user documentation [2].
+  .
+  In Debian, these configurations directories are especially use to easily
+  toggle the loading of the various plugins shipped with the Debian packages.
+  Upstream defaults to load the plugins,  and this can be overridden by
+  changing the files in /etc/strongswan.d. As those latter files are tracked
+  as configuration files, modifications won't be reverted when the package is
+  upgraded. Default settings for the plugins can be found in the templates dir
+  in the /usr/share/strongswan/templates/config folder.
+  .
+  [1]: http://wiki.strongswan.org/projects/strongswan/repository/revisions/55015036183c47692c2e2349a4c59bf00c107986
+  [2]: http://wiki.strongswan.org/projects/strongswan/wiki/StrongswanDirectory
+
+ -- Yves-Alexis Perez <corsac@debian.org>  Wed, 12 Mar 2014 10:31:44 +0100
+
+strongswan (5.1.1-2+splitplugins) experimental; urgency=medium
+
+  In 5.1.1-2 package, few plugins have been split from the main libstrongswan
+  package. The plugins are now in following packages:
+    - libstrongswan: main/default plugins, as defined by the strongSwan
+    project
+    - libstrongswan-standard-plugins: non default but useful plugins (agent,
+    gcm and openssl)
+    - libstrongswan-extra-plugins: more scarcely used plugins
+    - libcharon-extra-plugins: more scarecely used plugins for the charon
+    daemon
+
+  WARNING: this is an experimental release of the packaging, use at your own
+  risk.
+
+ -- Yves-Alexis Perez <corsac@debian.org>  Sun, 02 Feb 2014 20:05:15 +0100
+
+strongswan (5.1.0-1) unstable; urgency=low
+
+  Starting with strongSwan 5, the IKEv1 daemon (pluto) is gone, and the charon
+  daemon is now able to handle both IKEv1 and IKEv2 protocols.
+
+  There should be no issue for previous charon users, but for pluto users that
+  means they need to re-configure strongSwan in order to use charon. Some
+  migration help can be found on the strongSwan website at
+  http://wiki.strongswan.org/projects/strongswan/wiki/CharonPlutoIKEv1 and in
+  some IKEv1 configuration examples at
+  http://wiki.strongswan.org/projects/strongswan/wiki/IKEv1Examples.
+
+ -- Yves-Alexis Perez <corsac@debian.org>  Mon, 30 Sep 2013 20:43:03 +0200
+
+strongswan (4.5.0-1) unstable; urgency=low
+
+  Starting with strongswan 4.5.0 upstream, the IKEv2 protocol is now the
+  default. This can easily be changed using the keyexchange=ikev1 config
+  option (either in the respective "conn" section or by putting it in the
+  "default" section and therefore applying it to all existing connections).
+
+  The IKEv2 protocol has less overhead, more features (e.g. NAT-Traversal by
+  default, MOBIKE, Mobile IPv6), and provides better error messages in case
+  the connection can not be established. It is therefore highly recommended
+  to use it when the other side also supports it.
+  
+  Addtionally, strongswan 4.5.0-1 now enables support for NAT Traversal in
+  combination with IPsec transport mode (the support for this has existed 
+  for a long time, but was disabled due to security concerns). This is 
+  required e.g. to let mobile phone clients (notably Android, iPhone) 
+  connect to an L2TP/IPsec gateway using strongswan. The security 
+  implications as described in the original README.NAT-Traversal file from 
+  the openswan distribution are:
+  
+  * Transport Mode can't be used without NAT in the IPSec layer. Otherwise,
+    all packets for the NAT device (including all hosts behind it) would be
+    sent to the NAT-T Client. This would create a sort of blackhole between
+    the peer which is not behind NAT and the NAT device.
+
+  * In Tunnel Mode with roadwarriors, we CAN'T accept any IP address,
+    otherwise, an evil roadwarrior could redirect all trafic for one host
+    (including a host on the private network) to himself. That's why, you have
+    to specify the private IP in the configuration file, use virtual IP
+    management, or DHCP-over-IPSec.
+
+ -- Rene Mayrhofer <rmayr@debian.org>  Sun,  28 Nov 2010 13:16:00 +0200
+
+Local variables:
+mode: debian-changelog
+End:

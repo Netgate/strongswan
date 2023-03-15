@@ -1,0 +1,11 @@
+# libstrongswan plugins
+usr/lib/ipsec/plugins/libstrongswan-agent.so
+usr/lib/ipsec/plugins/libstrongswan-gcm.so
+usr/lib/ipsec/plugins/libstrongswan-openssl.so
+# config file
+usr/share/strongswan/templates/config/plugins/agent.conf
+usr/share/strongswan/templates/config/plugins/gcm.conf
+usr/share/strongswan/templates/config/plugins/openssl.conf
+etc/strongswan.d/charon/agent.conf
+etc/strongswan.d/charon/gcm.conf
+etc/strongswan.d/charon/openssl.conf

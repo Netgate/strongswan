@@ -1,0 +1,83 @@
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] added child to existing configuration '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] added configuration '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] adding virtual IP address pool [.:[:xdigit:]]+/[0-9]{1,3}$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] assigning new lease to '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] certificate status is not available$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] checking certificate status of "[^"]+"$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] deleted connection '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\]   id '%any' not confirmed by certificate, defaulting to '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] lease [.:[:xdigit:]]+ by '[^']+' went offline$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] left nor right host is our side, assuming left=local$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\]   loaded (ca )?certificate "[^"]+" from '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\]   loaded (ECDSA|RSA) private key from '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\]   loaded (IKE|EAP) secret for .+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] loading (aa|attribute|ca|ocsp signer) certificates from '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] loading (crls|secrets) from '/[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] looking for (XAuthInitPSK )?peer configs matching [.:[:xdigit:]]+(\[[^\[]+\])?\.\.\.[.:[:xdigit:]]+\[[^\[]+\]$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\]   reached self-signed root ca with a path length of 0$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] reassigning offline lease to '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] received stroke: add connection '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] received stroke: ((add|delete) connection|initiate|terminate) '[^']+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] selected peer config .+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\] sending UNITY_SPLIT_INCLUDE: [.:[:xdigit:]]+/[0-9]{1,3}$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[CFG\]   using trusted (ca )?certificate "[^"]+"$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[DMN\] signal of type SIGINT received\. Shutting down$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[DMN\] Starting IKE charon daemon \(strongSwan [^)]+\)$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[ENC\] (generating|parsed) (CREATE_CHILD_SA|INFORMATIONAL(|_V1)|ID_PROT|IKE_(AUTH|SA_INIT)|QUICK_MODE|TRANSACTION) re(sponse|quest) [0-9]+ \[ [^]]*\]$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[ENC\] received unknown vendor ID: [:[:xdigit:]]+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[ENC\] unknown attribute type \(28683\)$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] assigning virtual IP [.:[:xdigit:]]+ to peer '.+'$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] authentication of '[^']+' (\(myself\) )?with .+ (signature )?successful$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] CHILD_SA [^{]+\{[0-9]+\} established with SPIs [[:xdigit:]]+_i [[:xdigit:]]+_o and TS [.:[:xdigit:]]+/[0-9]{1,3}(\[[^]]+\])? === [.:[:xdigit:]]+/[0-9]{1,3}(\[[^]]+\])?$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] CHILD_SA closed$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] CHILD_SA not found, ignored$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] closing CHILD_SA [^{]+\{[0-9]+\} with SPIs [[:xdigit:]]+_i \([0-9]+ bytes\) [[:xdigit:]]+_o \([0-9]+ bytes\) and TS [.:[:xdigit:]]+/[0-9]{1,3}(\[[^]]+\])? === [.:[:xdigit:]]+/[0-9]{1,3}(\[[^]]+\])?$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] closing expired CHILD_SA [^{]+\{[0-9]+\} with SPIs [[:xdigit:]]+_i [[:xdigit:]]+_o and TS [.:[:xdigit:]]+/[0-9]{1,3}(\[[^]]+\])? === [.:[:xdigit:]]+/[0-9]{1,3}(\[[^]]+\])?$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] deleting IKE_SA [^\[]+\[[0-9]+\] between [.:[:xdigit:]]+\[[^]]+\]\.\.\.[.:[:xdigit:]]+\[[^]]+\]$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] destroying IKE_SA in state CONNECTING without notification$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] (establish|restart)ing CHILD_SA .+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] faking NAT situation to enforce UDP encapsulation$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] giving up after [0-9]+ retransmits$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] IKE_SA [^\[]+\[[0-9]+\] established between [.:[:xdigit:]]+\[[^]]+\]\.\.\.[.:[:xdigit:]]+\[[^]]+\]$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] IKE_SA deleted$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] initiating (Main Mode )?IKE_SA [^\[]+\[[0-9]+\] to [.:[:xdigit:]]+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] local host is behind NAT, sending keep alives$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] looking for a route to [.:[:xdigit:]]+ \.\.\.$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] maximum IKE_SA lifetime [0-9]+s$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] no route found to reach [.:[:xdigit:]]+, MOBIKE update deferred$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] old path is not available anymore, try to find another$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] peer not responding, trying again \([0-9]+/[0-9]+\)$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] peer requested virtual IP (%any|[.:[:xdigit:]]+)$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] reauthenticating IKE_SA .+(\[[0-9]+\])$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] reauthenticating IKE_SA due to address change$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] received AUTH_LIFETIME of [0-9]+s, scheduling reauthentication in [0-9]+s$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] received retransmit of response with ID [0-9]+, but next request already sent$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] (received|sending) (cert request|end entity cert) for "[^"]+"$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] (received|sending) DELETE for ESP CHILD_SA with SPI [[:xdigit:]]+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] (received|sending) DELETE for IKE_SA .+\[[0-9]+\]$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] received .+ vendor ID$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] remote host is behind NAT$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] retransmit [0-9]+ of request with message ID [0-9]+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] scheduling reauthentication in [0-9]+s$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] sending DPD request$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] sending keep alive to [.:[:xdigit:]]+\[[0-9]+\]$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] sending retransmit [0-9]+ of request message ID [0-9]+, seq [0-9]+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] XAuth authentication of '[^']+' successful$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[IKE\] [.:[:xdigit:]]+ is initiating an IKE_SA$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[JOB\] deleting CHILD_SA after [0-9]+ seconds of inactivity$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[JOB\] DPD check timed out, enforcing DPD action$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[JOB\] spawning [0-9]+ worker threads$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[KNL\] creating (delete|rekey) job for CHILD_SA ESP/0x[[:xdigit:]]+/[.:[:xdigit:]]+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[KNL\] creating (delete|rekey) job for ESP CHILD_SA with SPI [[:xdigit:]]+ and reqid \{[0-9]+\}$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[KNL\] interface .+ ((de)?activated|deleted)$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[KNL\] [.:[:xdigit:]]+ (dis)?appeared (from|on) .+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[LIB\] dropped capabilities, running as uid [0-9]+, gid [0-9]+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[LIB\] loaded plugins: .+$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[LIB\] unable to load [0-9]+ plugin features \([0-9]+ due to unmet dependencies\)$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[NET\] error writing to socket: Network is unreachable$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ charon: [0-9]+\[NET\] (received|sending) packet: from [.:[:xdigit:]]+\[[0-9]+\] to [.:[:xdigit:]]+\[[0-9]+\]( \([0-9]+ bytes\))?$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ ipsec\[[0-9]+\]: Stopping strongSwan IPsec\.\.\.$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ ipsec_starter\[[0-9]+\]: charon \([0-9]+\) started after [0-9]+ ms$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ ipsec_starter\[[0-9]+\]: charon stopped after [0-9]+ ms$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ ipsec_starter\[[0-9]+\]: ipsec starter stopped$
+^\w{3} [ :0-9]{11} [._[:alnum:]-]+ ipsec(_starter)?\[[0-9]+\]: Starting strongSwan [0-9.]+ IPsec \[starter\]\.\.\.$

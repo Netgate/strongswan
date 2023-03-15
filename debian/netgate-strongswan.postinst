@@ -2,8 +2,8 @@
 
 set -e
 
-charon_conf_file=/etc/strongswan/strongswan.d/charon.conf
-tnsr_charon_conf_file=/etc/strongswan/strongswan.d/tnsr_charon_defaults.conf
+charon_conf_file=/etc/strongswan.d/charon.conf
+tnsr_charon_conf_file=/etc/strongswan.d/tnsr_charon_defaults.conf
 
 rm -f ${tnsr_charon_conf_file}
 

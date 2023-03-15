@@ -1,0 +1,9 @@
+# directories for private keys so tighten the permissions
+strongswan-swanctl: non-standard-dir-perm etc/swanctl/bliss/ 0700 != 0755
+strongswan-swanctl: non-standard-dir-perm etc/swanctl/ecdsa/ 0700 != 0755
+strongswan-swanctl: non-standard-dir-perm etc/swanctl/pkcs8/ 0700 != 0755
+strongswan-swanctl: non-standard-dir-perm etc/swanctl/private/ 0700 != 0755
+strongswan-swanctl: non-standard-dir-perm etc/swanctl/rsa/ 0700 != 0755
+# strongswan libraries are installed in /usr/lib/ipsec because they are private
+# to the strongSwan project. We still want to split multiple binaries from the lib
+custom-library-search-path RUNPATH /usr/lib/ipsec *

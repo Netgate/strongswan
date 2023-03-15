@@ -1,0 +1,4 @@
+# strongswan libraries are installed in /usr/lib/ipsec because they are private
+# to the strongSwan project. We still want to split multiple binaries from the lib
+strongswan-libcharon: custom-library-search-path RUNPATH /usr/lib/ipsec *
+strongswan-libcharon: custom-library-search-path RUNPATH /usr/lib/ipsec/plugins *

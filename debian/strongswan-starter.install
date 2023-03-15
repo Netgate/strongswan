@@ -1,0 +1,17 @@
+#starter
+usr/lib/ipsec/starter
+usr/share/strongswan/templates/config/strongswan.d/starter.conf
+etc/strongswan.d/starter.conf
+usr/sbin/ipsec
+etc/ipsec.d
+etc/ipsec.conf
+etc/ipsec.secrets
+usr/share/man/man8/ipsec.8
+usr/share/man/man5/ipsec.conf.5
+usr/share/man/man5/ipsec.secrets.5
+#stroke
+usr/lib/ipsec/stroke
+usr/lib/ipsec/plugins/libstrongswan-stroke.so
+usr/share/strongswan/templates/config/plugins/stroke.conf
+etc/strongswan.d/charon/stroke.conf
+debian/usr.lib.ipsec.stroke /etc/apparmor.d/

@@ -1,0 +1,9 @@
+/etc
+/etc/init.d
+/etc/ipsec.d
+/etc/ipsec.d/cacerts
+/etc/ipsec.d/crls
+/etc/ipsec.d/ocspcerts
+/etc/ipsec.d/policies
+/etc/ipsec.d/private
+/var/lib/strongswan

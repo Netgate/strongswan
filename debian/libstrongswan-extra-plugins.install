@@ -1,0 +1,43 @@
+# Tool for TPM PCR extension
+usr/bin/tpm_extendpcr
+# libstrongswan plugins
+usr/lib/ipsec/plugins/libstrongswan-ccm.so
+usr/lib/ipsec/plugins/libstrongswan-chapoly.so
+usr/lib/ipsec/plugins/libstrongswan-cmac.so
+usr/lib/ipsec/plugins/libstrongswan-ctr.so
+usr/lib/ipsec/plugins/libstrongswan-curl.so
+usr/lib/ipsec/plugins/libstrongswan-curve25519.so
+usr/lib/ipsec/plugins/libstrongswan-gcrypt.so
+usr/lib/ipsec/plugins/libstrongswan-ldap.so
+usr/lib/ipsec/plugins/libstrongswan-ntru.so
+usr/lib/ipsec/plugins/libstrongswan-pkcs11.so
+usr/lib/ipsec/plugins/libstrongswan-test-vectors.so
+usr/lib/ipsec/plugins/libstrongswan-tpm.so
+# default configuration files
+usr/share/strongswan/templates/config/plugins/ccm.conf
+usr/share/strongswan/templates/config/plugins/cmac.conf
+usr/share/strongswan/templates/config/plugins/chapoly.conf
+usr/share/strongswan/templates/config/plugins/ctr.conf
+usr/share/strongswan/templates/config/plugins/curl.conf
+usr/share/strongswan/templates/config/plugins/curve25519.conf
+usr/share/strongswan/templates/config/plugins/gcrypt.conf
+usr/share/strongswan/templates/config/plugins/ldap.conf
+usr/share/strongswan/templates/config/plugins/ntru.conf
+usr/share/strongswan/templates/config/plugins/pkcs11.conf
+usr/share/strongswan/templates/config/plugins/test-vectors.conf
+usr/share/strongswan/templates/config/plugins/tpm.conf
+etc/strongswan.d/charon/ccm.conf
+etc/strongswan.d/charon/chapoly.conf
+etc/strongswan.d/charon/cmac.conf
+etc/strongswan.d/charon/ctr.conf
+etc/strongswan.d/charon/curl.conf
+etc/strongswan.d/charon/curve25519.conf
+etc/strongswan.d/charon/gcrypt.conf
+etc/strongswan.d/charon/ldap.conf
+etc/strongswan.d/charon/ntru.conf
+etc/strongswan.d/charon/pkcs11.conf
+etc/strongswan.d/charon/test-vectors.conf
+etc/strongswan.d/charon/tpm.conf
+# TPM libs
+usr/lib/ipsec/libtpmtss.so.*
+usr/lib/ipsec/libtpmtss.so

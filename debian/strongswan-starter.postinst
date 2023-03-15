@@ -1,0 +1,269 @@
+#! /bin/bash
+# postinst script for strongswan
+#
+# see: dh_installdeb(1)
+
+set -e
+
+# summary of how this script can be called:
+#        * <postinst> `configure' <most-recently-configured-version>
+#        * <old-postinst> `abort-upgrade' <new version>
+#        * <conflictor's-postinst> `abort-remove' `in-favour' <package>
+#          <new-version>
+#        * <deconfigured's-postinst> `abort-deconfigure' `in-favour'
+#          <failed-install-package> <version> `removing'
+#          <conflicting-package> <version>
+# for details, see /usr/share/doc/packaging-manual/
+#
+# quoting from the policy:
+#     Any necessary prompting should almost always be confined to the
+#        * <deconfigured's-postinst> `abort-deconfigure' `in-favour'
+#          <failed-install-package> <version> `removing'
+#          <conflicting-package> <version>
+# for details, see /usr/share/doc/packaging-manual/
+#
+# quoting from the policy:
+#     Any necessary prompting should almost always be confined to the
+#     post-installation script, and should be protected with a conditional
+#     so that unnecessary prompting doesn't happen if a package's
+#     installation fails and the `postinst' is called with `abort-upgrade',
+#     `abort-remove' or `abort-deconfigure'.
+
+CONF_FILE=/var/lib/strongswan/ipsec.conf.inc
+SECRETS_FILE=/var/lib/strongswan/ipsec.secrets.inc
+
+Warn ()
+{
+    echo "$*" >&2
+}
+
+Error ()
+{
+    Warn "Error: $*"
+}
+
+insert_private_key_filename() {
+	if ! ( [ -e $SECRETS_INC_FILE ] && egrep -q ": RSA $1" $SECRETS_INC_FILE ); then
+            echo ": RSA $1" >> $SECRETS_INC_FILE
+        fi
+}
+
+make_x509_cert() {
+    if [ $# -ne 12 ]; then
+        echo "Error in creating X.509 certificate"
+        exit 1
+    fi
+
+    case $5 in
+        false)
+            certreq=$4.req
+            selfsigned=""
+        ;;
+        true)
+            certreq=$4
+            selfsigned="-x509"
+        ;;
+        *)
+            echo "Error in creating X.509 certificate"
+            exit 1
+        ;;
+    esac
+
+    echo -e "$6\n$7\n$8\n$9\n${10}\n${11}\n${12}\n\n\n" | \
+      /usr/bin/openssl req -new -outform PEM -out $certreq \
+                       -newkey rsa:$1 -nodes -keyout $3 -keyform PEM \
+                       -days $2 $selfsigned >/dev/null
+}
+
+enable_daemon_start() {
+    daemon=$1
+    protocol=$2
+
+    echo -n "Enabling ${protocol} support by ${daemon}... "
+    if [ -e $CONF_FILE ] && egrep -q "^\w+${daemon}start=yes\w*$" $CONF_FILE; then
+        echo "already enabled"
+    elif [ -e $CONF_FILE ] && egrep -q "^\w+${daemon}start=no\w*$" $CONF_FILE; then
+      	sed "s/${daemon}start=no/${daemon}start=yes/" < $CONF_FILE > $CONF_FILE.tmp
+        cp $CONF_FILE.tmp $CONF_FILE
+	rm $CONF_FILE.tmp
+        echo "done"
+    elif [ -e $CONF_FILE ] && egrep -q "^\w+#\w*${daemon}start=(yes|no)\w*$" $CONF_FILE; then
+      	sed "s/^\w+#\w*${daemon}start=(yes|no)\w*$/\t${daemon}start=yes/" < $CONF_FILE > $CONF_FILE.tmp
+        cp $CONF_FILE.tmp $CONF_FILE
+	rm $CONF_FILE.tmp
+        echo "done"
+    elif [ ! -e $CONF_FILE ]; then
+	echo -e "\t${daemon}start=yes" > $CONF_FILE
+    else
+        echo "ERROR: unknown or nonexistant ${daemon}start= directive, please fix manually!"
+    fi
+}
+
+disable_daemon_start() {
+    daemon=$1
+    protocol=$2
+
+    echo -n "Disabling ${protocol} support by ${daemon}... "
+    if [ -e $CONF_FILE ] && ( egrep -q "^\w+${daemon}start=no\w*$" $CONF_FILE ||
+       egrep -q "^\w+#\w*${daemon}start=(yes|no)\w*$" $CONF_FILE ); then
+        echo "already disabled"
+    elif [ -e $CONF_FILE ] && egrep -q "^\w+${daemon}start=yes\w*$" $CONF_FILE; then
+      	sed "s/${daemon}start=yes/${daemon}start=no/" < $CONF_FILE > $CONF_FILE.tmp
+        cp $CONF_FILE.tmp $CONF_FILE
+	rm $CONF_FILE.tmp
+        echo "done"
+    elif [ ! -e $CONF_FILE ]; then
+	echo -e "\t${daemon}start=yes" > $CONF_FILE
+    else
+        echo "ERROR: unknown or nonexistant ${daemon}start= directive, please fix manually!"
+    fi
+}
+
+setup_strongswan_user() {
+        if ! getent passwd strongswan >/dev/null; then
+                adduser --quiet --system --no-create-home --home /var/lib/strongswan --shell /usr/sbin/nologin strongswan
+        fi
+}
+
+. /usr/share/debconf/confmodule
+
+case "$1" in
+    configure)
+	db_get strongswan/install_x509_certificate
+	if [ "$RET" = "true" ]; then
+	    db_get strongswan/how_to_get_x509_certificate
+	    if [ "$RET" = "create" ]; then
+                # extract the key from a (newly created) x509 certificate
+		host=`hostname`
+		newkeyfile="/etc/ipsec.d/private/${host}Key.pem"
+       		newcertfile="/etc/ipsec.d/certs/${host}Cert.pem"
+                if [ -e $newcertfile -o -e $newkeyfile ]; then
+                    Error "$newcertfile or $newkeyfile already exists."
+                    Error "Please remove them first an then re-run dpkg-reconfigure to create a new keypair."
+                else
+     			# create a new certificate
+       			db_get strongswan/rsa_key_length
+       			keylength=$RET
+       			db_get strongswan/x509_self_signed
+       			selfsigned=$RET
+       			db_get strongswan/x509_country_code
+       			countrycode=$RET
+       			if [ -z "$countrycode" ]; then countrycode="."; fi
+       			db_get strongswan/x509_state_name
+       			statename=$RET
+       			if [ -z "$statename" ]; then statename="."; fi
+       			db_get strongswan/x509_locality_name
+       			localityname=$RET
+       			if [ -z "$localityname" ]; then localityname="."; fi
+       			db_get strongswan/x509_organization_name
+       			orgname=$RET
+       			if [ -z "$orgname" ]; then orgname="."; fi
+       			db_get strongswan/x509_organizational_unit
+       			orgunit=$RET
+       			if [ -z "$orgunit" ]; then orgunit="."; fi
+       			db_get strongswan/x509_common_name
+       			commonname=$RET
+       			if [ -z "$commonname" ]; then commonname="."; fi
+       			db_get strongswan/x509_email_address
+       			email=$RET
+       			if [ -z "$email" ]; then email="."; fi
+       			make_x509_cert $keylength 1500 "$newkeyfile" "$newcertfile" "$selfsigned" "$countrycode" "$statename" "$localityname" "$orgname" "$orgunit" "$commonname" "$email"
+       			chmod 0600 "$newkeyfile"
+       			umask 077
+       			insert_private_key_filename "$newkeyfile"
+       			echo "Successfully created x509 certificate."
+       		fi
+       	    elif [ "$RET" = "import" ]; then
+		# existing certificate - use it
+		db_get strongswan/existing_x509_certificate_filename
+		certfile=$RET
+		db_get strongswan/existing_x509_key_filename
+		keyfile=$RET
+		db_get strongswan/existing_x509_rootca_filename
+		cafile=$RET
+
+		if [ ! "$certfile" ] || [ ! "$keyfile" ]; then
+		    Error "Either the certificate or the key filename is not specified."
+		elif ! ( ( [ -f "$certfile" ] || [ -L "$certfile" ] ) && ( [ -f "$keyfile" ] || [ -L "$keyfile" ] ) && ( [ "$cafile" = "" ] || ( [ -f "$cafile" ] || [ -L "$cafile" ] ) ) ); then
+		    Error "Either the certificate or the key"${cafile:+ or the rootca}" file is not a regular file or symbolic link."
+		elif [ ! "`grep 'BEGIN CERTIFICATE' $certfile`" ] || [ ! "`grep 'BEGIN RSA PRIVATE KEY' $keyfile`" ] || ( [ "$cafile" != "" ] && [ ! "`grep 'BEGIN CERTIFICATE' $cafile`" ] ); then
+		    Error "Either the certificate or the key"${cafile:+ or the rootca}" file is not a valid PEM type file."
+		elif [ "$cafile" ] && ( [ "$certfile" = "$cafile" ] || [ "$keyfile" = "$cafile" ]); then
+		    Error "The certificate or the key file contains the rootca - unable to import automatically."
+		elif [ "`grep 'BEGIN CERTIFICATE' $certfile | wc -l`" -gt 1 ]; then
+		    Error "The certificate file contains more than one certificate - unable to import automatically."
+		elif [ "`grep 'ENCRYPTED' $keyfile`" ]; then
+		    Error "The key file contains an encrypted key - unable to import automatically."
+		else
+		    newcertfile="/etc/ipsec.d/certs/$(basename "$certfile")"
+		    newkeyfile="/etc/ipsec.d/private/$(basename "$keyfile")"
+		    if [ "$cafile" ]; then
+			newcafile="/etc/ipsec.d/private/$(basename "$cafile")"
+		    else
+			newcafile=""
+		    fi
+
+		    if [ -e "$newcertfile" ] || [ -e "$newkeyfile" ] || ( [ "$newcafile" != "" ] && [ -e "$newcafile" ] ); then
+			Error "$newcertfile or $newkeyfile"${newcafile:+ or $newcafile}" already exists."
+			Error "Please remove them first and then re-run dpkg-reconfigure to extract an existing keypair"${newcafile:+ and a rootca}"."
+		    else
+			openssl x509 -in $certfile -out $newcertfile 2>/dev/null
+			umask 077
+			openssl rsa -passin pass:"" -in $keyfile -out $newkeyfile 2>/dev/null
+			chmod 0600 "$newkeyfile"
+			insert_private_key_filename "$newkeyfile"
+			cp "$cafile" /etc/ipsec.d/cacerts
+			echo "Successfully integrated existing x509 certificate."
+		    fi
+		fi
+            fi
+	    db_set strongswan/install_x509_certificate false
+	fi
+
+	# disabled for now, until we can solve the don't-edit-conffiles issue
+        #db_get strongswan/ikev1
+        #if [ "$RET" != "true" ]; then
+        #    enable_daemon_start "pluto" "IKEv1"
+	#else
+        #    disable_daemon_start "pluto" "IKEv1"
+        #fi
+        #db_get strongswan/ikev2
+        #if [ "$RET" != "true" ]; then
+        #    enable_daemon_start "charon" "IKEv2"
+	#else
+        #    disable_daemon_start "charon" "IKEv2"
+        #fi
+
+	# create user for strongswan to change its uid into
+	setup_strongswan_user
+
+	if [ -z "$2" ]; then
+	    # no old configured version - start strongswan now
+            invoke-rc.d ipsec start || true
+        else
+  	    # does the user wish strongswan to restart?
+	    db_get strongswan/restart
+	    if [ "$RET" = "true" ]; then
+	         invoke-rc.d ipsec restart || true # sure, we'll restart it for you
+	    fi
+	fi
+
+        db_stop
+
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+
+    ;;
+
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 0
+    ;;
+esac
+
+# dh_installdeb will replace this with shell code automatically
+
+#DEBHELPER#
+
+exit 0

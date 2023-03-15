@@ -1,0 +1,19 @@
+# most commonly used libcharon plugins
+# 1) eap-mschapv2 is required on the client side to connect to VPN
+# concentrators configured for Windows 7+ and modern OSX/iOS using IKEv2.
+# In such scenario, the VPN concentrator identifies itself with a public
+# key and asks the client to authenticate with MSCHAPv2.
+# 2) xauth-generic is required on the client side to connect to VPN
+# concentrators configured for Android and older OSX/iOS using IKEv1 and
+# XAUTH. In such scenario, the VPN concentrator identifies itself with a
+# public key or a shared secret and asks the client to authenticate with a
+# XAUTH password.
+# plugins
+usr/lib/ipsec/plugins/libstrongswan-eap-mschapv2.so
+usr/lib/ipsec/plugins/libstrongswan-xauth-generic.so
+# config templates
+usr/share/strongswan/templates/config/plugins/eap-mschapv2.conf
+usr/share/strongswan/templates/config/plugins/xauth-generic.conf
+# configuration files
+etc/strongswan.d/charon/eap-mschapv2.conf
+etc/strongswan.d/charon/xauth-generic.conf

@@ -1,0 +1,7 @@
+# as here private data is stored we need tighter perms here
+strongswan-starter: non-standard-dir-perm etc/ipsec.d/private/ 0700 != 0755
+strongswan-starter: non-standard-file-perm etc/ipsec.secrets 0600 != 0644
+strongswan-starter: non-standard-dir-perm var/lib/strongswan/ 0700 != 0755
+# strongswan libraries are installed in /usr/lib/ipsec because they are private
+# to the strongSwan project. We still want to split multiple binaries from the lib
+custom-library-search-path RUNPATH /usr/lib/ipsec *

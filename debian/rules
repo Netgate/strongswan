@@ -1,90 +1,288 @@
 #!/usr/bin/make -f
+export DEB_LDFLAGS_MAINT_APPEND=-Wl,-O1
+#export DEB_LDFLAGS_MAINT_APPEND=-Wl,--as-needed -Wl,-O1 -Wl,-z,defs
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all
 
-#export DH_VERBOSE=1
-
-CC = gcc
-CFLAGS = -Wall -Wno-format -Wno-pointer-sign -g
-CONFIGURE_ARGS = \
-	--prefix=/usr --libexecdir=/usr/libexec --enable-curl \
-	--enable-sqlite --enable-eap-identity --enable-eap-md5 \
-	--enable-eap-mschapv2 --enable-eap-tls --enable-eap-radius --enable-xauth-eap \
-	--disable-farp --enable-dhcp --enable-openssl --enable-agent \
-	--enable-pkcs11 --enable-ctr --enable-ccm --enable-gcm --enable-addrblock \
-	--disable-nm  --with-capabilities=libcap \
-	--bindir=/usr/libexec/strongswan --sysconfdir=/etc/strongswan \
-	--with-ipsecdir=/usr/libexec/strongswan --with-ipseclibdir=/usr/lib/strongswan \
-	--with-dev-headers=/usr/include/strongswan --enable-md4 --disable-unity \
-	--with-tss=trousers --with-fips-mode=0 --enable-gcrypt --enable-xauth-pam \
-	--enable-xauth-noauth --enable-eap-gtc --enable-eap-ttls --enable-eap-peap \
-	--disable-tnc-ifmap --disable-tnc-pdp --enable-imc-test --enable-imv-test \
-	--enable-imc-scanner --enable-imv-scanner --enable-imc-attestation \
-	--enable-imv-attestation --enable-imv-os --enable-imc-os --enable-imc-swid \
-	--enable-imv-swid --enable-eap-tnc --enable-tnccs-20 --enable-tnccs-11 \
-	--enable-tnccs-dynamic --enable-tnc-imc --enable-tnc-imv --enable-cmd \
-	--enable-acert --enable-aikgen --enable-vici --enable-systemd --enable-swanctl \
-	--enable-kernel-vpp --with-ipsec-script=strongswan
-
-ifeq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
-	CFLAGS += -O2
-endif
-ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-	NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-	MAKEFLAGS += -j$(NUMJOBS)
-endif
-ifeq ($(DEB_BUILD_ARCH_CPU),i386)
-  CONFIGURE_ARGS += --enable-padlock
-endif
-
+ifneq ($(VPP_DIR),)
 CFLAGS+=-I$(VPP_DIR)/build-root/install-vpp-native/vpp/include
-CFLAGS+=-I$(LIBVPPMGMT_DIR)/usr/include
-CFLAGS+=-I$(LIBTNSRINFRA_DIR)/usr/include
 LDFLAGS+=-L$(VPP_DIR)/build-root/install-vpp-native/vpp/lib
+endif
+ifneq ($(LIBVPPMGMT_DIR),)
+CFLAGS+=-I$(LIBVPPMGMT_DIR)/usr/include
 LDFLAGS+=-L$(LIBVPPMGMT_DIR)/usr/lib/${DEB_HOST_MULTIARCH}
+endif
+ifneq ($(LIBTNSRINFRA_DIR),)
+CFLAGS+=-I$(LIBTNSRINFRA_DIR)/usr/include
 LDFLAGS+=-L$(LIBTNSRINFRA_DIR)/usr/lib/${DEB_HOST_MULTIARCH}
+endif
 
-build:
-	dh_testdir
-	./configure $(CONFIGURE_ARGS) CC="$(CC)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)"
-	$(MAKE)
-	touch build
+CONFIGUREARGS := --libdir=/usr/lib --libexecdir=/usr/lib \
+		--enable-addrblock \
+		--enable-agent \
+		--enable-ccm \
+		--enable-certexpire \
+		--enable-chapoly \
+		--enable-cmd \
+		--enable-ctr \
+		--enable-curl \
+		--enable-eap-aka \
+		--enable-eap-gtc \
+		--enable-eap-dynamic \
+		--enable-eap-identity \
+		--enable-eap-md5 \
+		--enable-eap-mschapv2 \
+		--enable-eap-peap \
+		--enable-eap-radius \
+		--enable-eap-tls \
+		--enable-eap-tnc \
+		--enable-eap-ttls \
+		--enable-error-notify \
+		--enable-forecast \
+		--enable-gcm \
+		--enable-gcrypt \
+		--enable-ha \
+		--enable-kernel-libipsec \
+		--enable-ldap \
+		--enable-led \
+		--enable-lookip \
+		--enable-mediation \
+		--enable-ntru \
+		--enable-openssl \
+		--enable-pkcs11 \
+		--enable-test-vectors \
+		--enable-tpm \
+		--enable-tss-tss2 \
+		--enable-unity \
+		--enable-xauth-eap \
+		--enable-xauth-pam \
+		--disable-blowfish \
+		--disable-fast \
+		--disable-des # BSD-Young license
+	#--with-user=strongswan --with-group=nogroup
+	#	--enable-kernel-pfkey --enable-kernel-klips \
+	# And for --enable-eap-sim we would need the library, which we don't
+	# have right now.
+	# Don't --enable-cisco-quirks, because some other IPsec implementations
+	# (most notably the Phion one) have problems connecting when pluto
+	# sends these Cisco options.
+	# don't enable medsrv/medcli right now (20160523) since clearsilver FTBFS
+	#--enable-medsrv --enable-medcli \
 
-clean:
-	dh_testdir
-	dh_testroot
-	rm -f build
-	[ ! -f Makefile ] || $(MAKE) clean
-	dh_clean
+# get the various DEB_BUILD/DEB_HOST variables
+include /usr/share/dpkg/architecture.mk
 
-install: build
-	dh_testdir
-	dh_testroot
-	dh_clean
-	dh_installdirs
-	$(MAKE) DESTDIR=$(CURDIR)/debian/tmp install
+# the padlock plugin only makes sense on i386
+# AESNI and RdRand only make sense on i386 and amd64
+ifeq ($(DEB_HOST_ARCH_CPU),i386)
+  CONFIGUREARGS += --enable-padlock --enable-rdrand --enable-aesni
+endif
 
-binary-indep: build install
-binary-arch: build install
-	dh_testdir
-	dh_testroot
-	dh_installchangelogs NEWS
-	dh_installdocs README
+ifeq ($(DEB_HOST_ARCH_CPU),amd64)
+  CONFIGUREARGS += --enable-rdrand --enable-aesni
+endif
+
+ifeq ($(DEB_HOST_ARCH_OS),linux)
+	# only enable network-manager and capabilities dropping on linux hosts
+	# some plugins are linux-only too
+	CONFIGUREARGS += --enable-nm \
+		--with-nm-ca-dir=/etc/ssl/certs \
+		--with-capabilities=libcap \
+		--enable-dhcp \
+		--enable-af-alg \
+		--enable-connmark \
+		--enable-systemd --enable-swanctl
+endif
+
+ifeq ($(DEB_HOST_ARCH_OS),kfreebsd)
+	# recommended configure line for FreeBSD
+	# http://wiki.strongswan.org/projects/strongswan/wiki/FreeBSD
+	CONFIGUREARGS += --disable-kernel-netlink \
+		--enable-kernel-pfkey --enable-kernel-pfroute \
+		--with-group=wheel
+endif
+
+override_dh_auto_configure:
+	dh_auto_configure -- $(CONFIGUREARGS)
+
+override_dh_auto_clean:
+	dh_auto_clean
+	# after a make clean, no binaries _should_ be left, but ....
+	-find $(CURDIR) -name "*.o" | xargs --no-run-if-empty rm
+
+	# Really clean (#356716)
+	# This is a hack: should be better implemented
+	rm -f lib/libstrongswan/libstrongswan.a || true
+	rm -f lib/libstrongswan/liboswlog.a || true
+
+	# just in case something went wrong
+	rm -f $(CURDIR)/debian/ipsec.secrets
+
+	# and make sure that template are up-to-date
+	debconf-updatepo
+
+
+override_dh_install-arch:
+	# remove all .la files
+	find debian/tmp/usr/lib -name '*.la' -delete
+
+	# first special cases
+ifeq ($(DEB_HOST_ARCH_OS),linux)
+	# handle Linux-only plugins
+	dh_install -p netgate-libstrongswan-standard-plugins usr/lib/ipsec/plugins/libstrongswan-connmark.so
+	dh_install -p netgate-libstrongswan-standard-plugins usr/share/strongswan/templates/config/plugins/connmark.conf
+	dh_install -p netgate-libstrongswan-standard-plugins etc/strongswan.d/charon/connmark.conf
+	dh_install -p netgate-libcharon-extra-plugins usr/lib/ipsec/plugins/libstrongswan-dhcp.so
+	dh_install -p netgate-libcharon-extra-plugins usr/share/strongswan/templates/config/plugins/dhcp.conf
+	dh_install -p netgate-libcharon-extra-plugins etc/strongswan.d/charon/dhcp.conf
+
+	dh_install -p netgate-libstrongswan usr/lib/ipsec/plugins/libstrongswan-kernel-netlink.so
+	dh_install -p netgate-libstrongswan usr/share/strongswan/templates/config/plugins/kernel-netlink.conf
+	dh_install -p netgate-libstrongswan etc/strongswan.d/charon/kernel-netlink.conf
+
+	dh_install -p netgate-libstrongswan usr/lib/ipsec/plugins/libstrongswan-kernel-vpp.so
+	dh_install -p netgate-libstrongswan usr/share/strongswan/templates/config/plugins/kernel-vpp.conf
+	dh_install -p netgate-libstrongswan etc/strongswan.d/charon/kernel-vpp.conf
+
+	dh_install -p netgate-libstrongswan-extra-plugins usr/lib/ipsec/plugins/libstrongswan-af-alg.so
+	dh_install -p netgate-libstrongswan-extra-plugins usr/share/strongswan/templates/config/plugins/af-alg.conf
+	dh_install -p netgate-libstrongswan-extra-plugins etc/strongswan.d/charon/af-alg.conf
+	# the systemd service file only gets generated on Linux
+	dh_install -p netgate-strongswan-starter lib/systemd/system/strongswan-starter.service
+	# XFRM is Linux only
+	dh_install -p netgate-strongswan-libcharon usr/lib/ipsec/xfrmi
+endif
+
+ifeq ($(DEB_HOST_ARCH_OS),kfreebsd)
+	# handle FreeBSD-only plugins
+	dh_install -p libstrongswan usr/lib/ipsec/plugins/libstrongswan-kernel-pfkey.so
+	dh_install -p libstrongswan usr/share/strongswan/templates/config/plugins/kernel-pfkey.conf
+	dh_install -p libstrongswan etc/strongswan.d/charon/kernel-pfkey.conf
+
+	dh_install -p libstrongswan usr/lib/ipsec/plugins/libstrongswan-kernel-pfroute.so
+	dh_install -p libstrongswan usr/share/strongswan/templates/config/plugins/kernel-pfroute.conf
+	dh_install -p libstrongswan etc/strongswan.d/charon/kernel-pfroute.conf
+endif
+
+ifeq ($(DEB_HOST_ARCH_CPU),i386)
+	# special handling for padlock, as it is only built on i386
+	dh_install -p libstrongswan-extra-plugins usr/lib/ipsec/plugins/libstrongswan-padlock.so
+	dh_install -p libstrongswan-extra-plugins usr/share/strongswan/templates/config/plugins/padlock.conf
+	dh_install -p libstrongswan-extra-plugins etc/strongswan.d/charon/padlock.conf
+
+	dh_install -p libstrongswan-extra-plugins usr/lib/ipsec/plugins/libstrongswan-rdrand.so
+	dh_install -p libstrongswan-extra-plugins usr/share/strongswan/templates/config/plugins/rdrand.conf
+	dh_install -p libstrongswan-extra-plugins etc/strongswan.d/charon/rdrand.conf
+
+	dh_install -p libstrongswan-standard-plugins usr/lib/ipsec/plugins/libstrongswan-aesni.so
+	dh_install -p libstrongswan-standard-plugins usr/share/strongswan/templates/config/plugins/aesni.conf
+	dh_install -p libstrongswan-standard-plugins etc/strongswan.d/charon/aesni.conf
+endif
+
+ifeq ($(DEB_HOST_ARCH_CPU), amd64)
+	dh_install -p netgate-libstrongswan-extra-plugins usr/lib/ipsec/plugins/libstrongswan-rdrand.so
+	dh_install -p netgate-libstrongswan-extra-plugins usr/share/strongswan/templates/config/plugins/rdrand.conf
+	dh_install -p netgate-libstrongswan-extra-plugins etc/strongswan.d/charon/rdrand.conf
+
+	dh_install -p netgate-libstrongswan-standard-plugins usr/lib/ipsec/plugins/libstrongswan-aesni.so
+	dh_install -p netgate-libstrongswan-standard-plugins usr/share/strongswan/templates/config/plugins/aesni.conf
+	dh_install -p netgate-libstrongswan-standard-plugins etc/strongswan.d/charon/aesni.conf
+endif
+
+	# then install the rest, ignoring the above
+	dh_install \
+		-X\.la -X\.a \
+		-Xmedsrv -Xman3 \
+		-Xlibstrongswan-connmark.so -X connmark.conf \
+		-Xlibstrongswan-kernel- -X kernel- \
+		-Xlibstrongswan-dhcp.so -X dhcp.conf \
+		-Xlibstrongswan-padlock.so -X padlock.conf \
+		-Xlibstrongswan-rdrand.so -X rdrand.conf \
+		-Xlibstrongswan-aesni.so -X aesni.conf \
+		-Xlibstrongswan-af-alg.so -X af-alg.conf \
+		-Xstrongswan-starter.service
+
+	# AppArmor.
+	dh_apparmor --profile-name=usr.lib.ipsec.charon -p netgate-strongswan-charon
+	dh_apparmor --profile-name=usr.lib.ipsec.lookip -p netgate-libcharon-extra-plugins
+	dh_apparmor --profile-name=usr.lib.ipsec.stroke -p netgate-strongswan-starter
+	dh_apparmor --profile-name=usr.sbin.swanctl -p netgate-strongswan-swanctl
+	dh_apparmor --profile-name=usr.sbin.charon-systemd -p netgate-charon-systemd
+
+	# add additional files not covered by upstream makefile...
+	install --mode=0600 $(CURDIR)/debian/ipsec.secrets.proto $(CURDIR)/debian/netgate-strongswan-starter/etc/ipsec.secrets
+
+	# set permissions on ipsec.secrets and private key directories
+	chmod 600 $(CURDIR)/debian/netgate-strongswan-starter/etc/ipsec.secrets
+	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-starter/etc/ipsec.d/private/
+	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-starter/var/lib/strongswan/
+	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/bliss/
+	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/ecdsa/
+	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/pkcs8/
+	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/private/
+	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/rsa/
+
+	# TNSR doesn't need this service
+	rm -f $(CURDIR)/debian/tmp/lib/systemd/system/strongswan.service
+
+	# this is handled by update-rc.d
+	rm -rf $(CURDIR)/debian/netgate-strongswan-starter/etc/rc?.d
+
+	# delete var/lock/subsys and var/run to satisfy lintian
+	rm -rf $(CURDIR)/debian/openswan/var/lock
+	rm -rf $(CURDIR)/debian/openswan/var/run
+
+	# more lintian cleanups
+	find $(CURDIR)/debian/*strongswan*/ -name ".cvsignore" | xargs --no-run-if-empty rm -f
+	find $(CURDIR)/debian/*strongswan*/ -name "/.svn/" | xargs --no-run-if-empty rm -rf
+
+override_dh_installinit:
 	dh_installinit --name=ipsec
-	dh_install -s
-	dh_link
-	dh_strip --dbg-package=netgate-strongswan-dbg
-	dh_compress
-	dh_fixperms -Xetc/ipsec.secrets -Xetc/ipsec.d
-	dh_makeshlibs
-	dh_installdeb
+
+override_dh_installsystemd:
+	dh_installsystemd -p netgate-charon-systemd --no-enable --no-start --no-restart-after-upgrade strongswan-dataplane.service
+
+override_dh_installchangelogs:
+	dh_installchangelogs NEWS
+
+override_dh_fixperms:
+	dh_fixperms \
+		-X etc/ipsec.d \
+		-X etc/ipsec.secrets \
+		-X etc/swanctl/bliss \
+		-X etc/swanctl/ecdsa \
+		-X etc/swanctl/pkcs8 \
+		-X etc/swanctl/private \
+		-X etc/swanctl/rsa \
+		-X var/lib/strongswan
+
+override_dh_shlibdeps:
 	dh_shlibdeps -- --ignore-missing-info \
-		-l$(STAGE_DESTDIR)/usr/lib/strongswan \
 		-l$(VPP_DIR)/build-root/install-vpp-native/vpp/lib \
 		-l$(LIBVPPMGMT_DIR)/usr/lib/${DEB_HOST_MULTIARCH} \
 		-l$(LIBTNSRINFRA_DIR)/usr/lib/${DEB_HOST_MULTIARCH}
-	dh_gencontrol -a
-	dh_md5sums
-	dh_builddeb -s
 
-binary: binary-indep binary-arch
-.PHONY: build clean binary-indep binary-arch binary install
+override_dh_makeshlibs:
+	dh_makeshlibs -n -X usr/lib/ipsec/plugins
 
+override_dh_installlogcheck:
+	dh_installlogcheck --name strongswan
+
+ifeq ($(HOME),/home/salsa-ci)
+override_dh_auto_test: export TESTS_SUITES_EXCLUDE=http fetcher, stream
+endif
+override_dh_auto_test:
+ifeq ($(DEB_BUILD_ARCH),amd64_DISABLED)
+	dh_auto_test
+endif
+
+override_dh_missing-arch:
+	dh_missing --fail-missing
+
+override_dh_missing-indep:
+	dh_missing --list-missing
+
+override_dh_strip:
+	dh_strip --dbg-package=netgate-strongswan-dbg
+
+%:
+	dh $@
