@@ -17,6 +17,7 @@
 #include <syslog.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <errno.h>
 
 /* this plugin */
 #include "kernel_vpp_ipsec.h"
@@ -29,49 +30,11 @@
 
 #include <tnsrinfra/vec.h>
 #include <tnsrinfra/pool.h>
-#include <vppmgmt/vpp_mgmt_api.h>
+#include <vppmgmt2/vpp_mgmt2_api.h>
+#include <vppmgmt2/vpp_mgmt2_ipsec.h>
+#include <vppmgmt2/vpp_mgmt2_if.h>
 
 #define PRIO_BASE 100000
-
-/* constants from VPP */
-
-/* encryption algorithms */
-#define IPSEC_CRYPTO_ALG_NONE		0
-#define IPSEC_CRYPTO_ALG_AES_CBC_128	1
-#define IPSEC_CRYPTO_ALG_AES_CBC_192	2
-#define IPSEC_CRYPTO_ALG_AES_CBC_256	3
-#define IPSEC_CRYPTO_ALG_AES_CTR_128	4
-#define IPSEC_CRYPTO_ALG_AES_CTR_192	5
-#define IPSEC_CRYPTO_ALG_AES_CTR_256	6
-#define IPSEC_CRYPTO_ALG_AES_GCM_128	7
-#define IPSEC_CRYPTO_ALG_AES_GCM_192	8
-#define IPSEC_CRYPTO_ALG_AES_GCM_256	9
-/* DES-CBC not supported
- * #define IPSEC_CRYPTO_ALG_DES_CBC		10
- */
-#define IPSEC_CRYPTO_ALG_3DES_CBC	11
-#define IPSEC_CRYPTO_ALG_CHACHA20_POLY1305	12
-
-/* integrity algorithms */
-#define IPSEC_INTEG_ALG_NONE		0
-#define IPSEC_INTEG_ALG_MD5_96		1
-#define IPSEC_INTEG_ALG_SHA1_96		2
-#define IPSEC_INTEG_ALG_SHA_256_96	3
-#define IPSEC_INTEG_ALG_SHA_256_128	4
-#define IPSEC_INTEG_ALG_SHA_384_192	5
-#define IPSEC_INTEG_ALG_SHA_512_256	6
-#define IPSEC_INTEG_ALG_AES_GCM_128	7
-
-/* IPsec policies */
-#define IPSEC_POLICY_ACTION_BYPASS	0
-#define IPSEC_POLICY_ACTION_DISCARD	1
-#define IPSEC_POLICY_ACTION_RESOLVE	2
-#define IPSEC_POLICY_ACTION_PROTECT	3
-#define IPSEC_POLICY_N_ACTION		4
-
-/* IPsec protocols */
-#define IPSEC_PROTOCOL_ESP		0
-#define IPSEC_PROTOCOL_AH		1
 
 /*
  * Definitions and helper functions for strongswan plugin
@@ -122,7 +85,7 @@ kernel_vpp_check_connection(private_kernel_vpp_ipsec_t *this)
 	int ret;
 
 	this->mutex->lock(this->mutex);
-	ret = vmgmt_check_connection();
+	ret = vmgmt2_check_connection();
 	this->mutex->unlock(this->mutex);
 
 	if (ret < 0) {
@@ -139,90 +102,158 @@ kernel_vpp_check_connection(private_kernel_vpp_ipsec_t *this)
  */
 
 typedef struct {
-	int charonalg;
+	int ss_alg;
 	int keylen;
-	int vppalg;
+	int vpp_alg;
 } vpp_alg;
 
-#define foreach_enc_alg \
-_(ENCR_NULL,0,IPSEC_CRYPTO_ALG_NONE)				  \
-_(ENCR_AES_CBC,128,IPSEC_CRYPTO_ALG_AES_CBC_128)	  \
-_(ENCR_AES_CBC,192,IPSEC_CRYPTO_ALG_AES_CBC_192)	  \
-_(ENCR_AES_CBC,256,IPSEC_CRYPTO_ALG_AES_CBC_256)	  \
-_(ENCR_AES_CTR,128,IPSEC_CRYPTO_ALG_AES_CTR_128)	  \
-_(ENCR_AES_CTR,192,IPSEC_CRYPTO_ALG_AES_CTR_192)	  \
-_(ENCR_AES_CTR,256,IPSEC_CRYPTO_ALG_AES_CTR_256)	  \
-_(ENCR_AES_GCM_ICV16,160,IPSEC_CRYPTO_ALG_AES_GCM_128)	  \
-_(ENCR_AES_GCM_ICV16,224,IPSEC_CRYPTO_ALG_AES_GCM_192)	  \
-_(ENCR_AES_GCM_ICV16,288,IPSEC_CRYPTO_ALG_AES_GCM_256)	  \
-_(ENCR_3DES,192,IPSEC_CRYPTO_ALG_3DES_CBC)	  \
-_(ENCR_CHACHA20_POLY1305,288,IPSEC_CRYPTO_ALG_CHACHA20_POLY1305)	  \
+static vpp_alg encr_alg_map[] = {
+	{ ENCR_NULL, 0, IPSEC_API_CRYPTO_ALG_NONE, },
+	{ ENCR_AES_CBC, 128, IPSEC_API_CRYPTO_ALG_AES_CBC_128, },
+	{ ENCR_AES_CBC, 192, IPSEC_API_CRYPTO_ALG_AES_CBC_192, },
+	{ ENCR_AES_CBC, 256, IPSEC_API_CRYPTO_ALG_AES_CBC_256, },
+	{ ENCR_AES_CTR, 128, IPSEC_API_CRYPTO_ALG_AES_CTR_128, },
+	{ ENCR_AES_CTR, 192, IPSEC_API_CRYPTO_ALG_AES_CTR_192, },
+	{ ENCR_AES_CTR, 256, IPSEC_API_CRYPTO_ALG_AES_CTR_256, },
+	{ ENCR_AES_GCM_ICV16, 160, IPSEC_API_CRYPTO_ALG_AES_GCM_128, },
+	{ ENCR_AES_GCM_ICV16, 224, IPSEC_API_CRYPTO_ALG_AES_GCM_192, },
+	{ ENCR_AES_GCM_ICV16, 288, IPSEC_API_CRYPTO_ALG_AES_GCM_256, },
+	{ ENCR_CHACHA20_POLY1305, 288, IPSEC_API_CRYPTO_ALG_CHACHA20_POLY1305, },
+};
+static int n_encr_algs = sizeof(encr_alg_map)/sizeof(encr_alg_map[0]);
 
+static vpp_alg integ_alg_map[] = {
+	{ AUTH_HMAC_MD5_96, 128, IPSEC_API_INTEG_ALG_MD5_96, },
+	{ AUTH_HMAC_SHA1_96, 160, IPSEC_API_INTEG_ALG_SHA1_96, },
+	{ AUTH_HMAC_SHA2_256_128, 256, IPSEC_API_INTEG_ALG_SHA_256_128, },
+	{ AUTH_HMAC_SHA2_384_192, 384, IPSEC_API_INTEG_ALG_SHA_384_192, },
+	{ AUTH_HMAC_SHA2_512_256, 512, IPSEC_API_INTEG_ALG_SHA_512_256, },
+	{ AUTH_UNDEFINED, 0, IPSEC_API_INTEG_ALG_NONE, },
+};
+static int n_integ_algs = sizeof(integ_alg_map)/sizeof(integ_alg_map[0]);
 
 static int
-vpp_enc_alg(int alg, int keylen)
+vpp_alg_lookup(int alg, int keylen, int is_encr)
 {
-#define _(s,k,v) if (alg == s && keylen == k) return v;
-	foreach_enc_alg
-#undef _
-	return IPSEC_CRYPTO_ALG_NONE;
+	vpp_alg *map;
+	int i, n;
+
+	if (is_encr) {
+		map = encr_alg_map;
+		n = n_encr_algs;
+	} else {
+		map = integ_alg_map;
+		n = n_integ_algs;
+	}
+
+	for (i = 0; i < n; i++) {
+		vpp_alg *algp = map + i;
+
+		if (algp->ss_alg == alg && algp->keylen == keylen)
+			return algp->vpp_alg;
+	}
+
+	/* We only allow configuration of algs VPP supports, so we should
+	 * never reach this point.
+	 */
+	return -EINVAL;
 }
 
-#define foreach_auth_alg \
-_(AUTH_HMAC_MD5_96, 128, IPSEC_INTEG_ALG_MD5_96)			 \
-_(AUTH_HMAC_SHA1_96, 160, IPSEC_INTEG_ALG_SHA1_96)		   \
-_(AUTH_HMAC_SHA2_256_128, 256, IPSEC_INTEG_ALG_SHA_256_128)  \
-_(AUTH_HMAC_SHA2_384_192, 384, IPSEC_INTEG_ALG_SHA_384_192)  \
-_(AUTH_HMAC_SHA2_512_256, 512, IPSEC_INTEG_ALG_SHA_512_256)  \
-_(AUTH_UNDEFINED, 0, IPSEC_INTEG_ALG_NONE)
-
 static int
-vpp_auth_alg(int alg, int keylen)
+vpp_enc_alg(int alg, int keybits)
 {
-#define _(s,k,v) if (alg == s && keylen == k) return v;
-	foreach_auth_alg
-#undef _
-	return IPSEC_INTEG_ALG_NONE;
+	int ret = vpp_alg_lookup(alg, keybits, 1 /* is_encr */);
+
+	return (ret == -EINVAL) ? IPSEC_API_CRYPTO_ALG_NONE : ret;
 }
 
 static int
-convert_sa_to_vmgmt(vmgmt_ipsec_sa_t *v,
+vpp_auth_alg(int alg, int keybits)
+{
+	int ret = vpp_alg_lookup(alg, keybits, 0 /* is_encr */);
+
+	return (ret == -EINVAL) ? IPSEC_API_CRYPTO_ALG_NONE : ret;
+}
+
+/* Keys for AES-GCM and chacha20/poly1305 includes 4 bytes of salt for the
+ * nonce. Subtract from the key length for these algs
+ */
+static int
+vpp_enc_key_len(int alg, int keybytes)
+{
+	return (alg == ENCR_AES_GCM_ICV16 || alg == ENCR_CHACHA20_POLY1305) ?
+		keybytes - 4 : keybytes;
+}
+
+static int
+convert_sa_to_vapi(vapi_type_ipsec_sad_entry_v3 *sa,
 					kernel_ipsec_sa_id_t *id,
 					kernel_ipsec_add_sa_t *data)
 {
 	int addr_len = 4;
 
-	if (!v || !id || !data) {
-		return -1;
+	if (!sa || !id || !data) {
+		return -EINVAL;
 	}
 
-	v->sw_if_index = ~0;
-	v->spi = ntohl(id->spi);
-	v->sa_id = v->spi;
-	v->ipsec_proto = IPSEC_PROTOCOL_ESP;
-	v->crypto_alg = vpp_enc_alg(data->enc_alg, data->enc_key.len * 8);
-	v->crypto_key_len = data->enc_key.len;
-	memcpy(v->crypto_key, data->enc_key.ptr, data->enc_key.len);
-	v->integ_alg = vpp_auth_alg(data->int_alg, data->int_key.len * 8);
-	v->integ_key_len = data->int_key.len;
-	memcpy(v->integ_key, data->int_key.ptr, data->int_key.len);
-	v->esn = data->esn;
-	v->anti_replay = data->replay_window;
-	v->tunnel_mode = 0; /* tun protect uses transport mode SAs */
-	v->addr_family = id->src->get_family(id->src);
-	if (v->addr_family == AF_INET6) {
-		addr_len = 16;
-	}
-	memcpy(v->src_ip, id->src->get_address(id->src).ptr, addr_len);
-	memcpy(v->dst_ip, id->dst->get_address(id->dst).ptr, addr_len);
-	v->outbound = !(data->inbound);
-	v->udp_encap = data->encap;
+	sa->spi = ntohl(id->spi);
+	sa->sad_id = sa->spi;
+	sa->protocol = IPSEC_API_PROTO_ESP;
 
+	sa->crypto_algorithm =
+		vpp_enc_alg(data->enc_alg, data->enc_key.len * 8);
+	sa->crypto_key.length =
+		vpp_enc_key_len(data->enc_alg, data->enc_key.len);
+	memcpy(sa->crypto_key.data, data->enc_key.ptr, sa->crypto_key.length);
+	/* Copy salt if needed */
+	if (sa->crypto_key.length &&
+	    (sa->crypto_key.length < data->enc_key.len)) {
+		memcpy(&sa->salt, data->enc_key.ptr + sa->crypto_key.length,
+		       4);
+		/* Byte swap salt. It shouldn't be necessary, but the API
+		 * message defines it as a u32 instead of a u8[] so libvapi
+		 * automatically swaps it. 
+		 */
+		sa->salt = htonl(sa->salt);
+	}
+
+	sa->integrity_algorithm =
+		vpp_auth_alg(data->int_alg, data->int_key.len * 8);
+	sa->integrity_key.length = data->int_key.len;
+	memcpy(sa->integrity_key.data, data->int_key.ptr, data->int_key.len);
+
+	if (data->esn) {
+		sa->flags |= IPSEC_API_SAD_FLAG_USE_ESN;
+	}
+	if (data->replay_window) {
+		sa->flags |= IPSEC_API_SAD_FLAG_USE_ANTI_REPLAY;
+	}
+	if (id->src->get_family(id->src) == AF_INET6) {
+		sa->flags |= IPSEC_API_SAD_FLAG_IS_TUNNEL_V6;
+		sa->tunnel.src.af = ADDRESS_IP6;
+		sa->tunnel.dst.af = ADDRESS_IP6;
+		memcpy(&sa->tunnel.src.un.ip6,
+		       id->src->get_address(id->src).ptr, 16);
+		memcpy(&sa->tunnel.dst.un.ip6,
+		       id->dst->get_address(id->dst).ptr, 16);
+	} else {
+		addr_len = 4;
+		sa->tunnel.src.af = ADDRESS_IP4;
+		sa->tunnel.dst.af = ADDRESS_IP4;
+		memcpy(&sa->tunnel.src.un.ip4,
+		       id->src->get_address(id->src).ptr, 4);
+		memcpy(&sa->tunnel.dst.un.ip4,
+		       id->dst->get_address(id->dst).ptr, 4);
+	}
+	if (data->inbound) {
+		sa->flags |= IPSEC_API_SAD_FLAG_IS_INBOUND;
+	}
 	if (data->encap) {
-		v->udp_src_port = id->src->get_port(id->src);
-		v->udp_dst_port = id->dst->get_port(id->dst);
+		sa->flags |= IPSEC_API_SAD_FLAG_UDP_ENCAP;
+		sa->udp_src_port = id->src->get_port(id->src);
+		sa->udp_dst_port = id->dst->get_port(id->dst);
 	}
-	
+
 	return 0;
 }
 
@@ -237,7 +268,7 @@ print_sa_id(kernel_ipsec_sa_id_t *id, const char *msg)
 	inet_ntop(af, (void *) (id->dst->get_address(id->dst)).ptr,
 			  dstaddr, sizeof(dstaddr));
 
-	DBG1(DBG_KNL, "kernel_vpp: %s: src addr %s:%d dst addr %s:%d "
+	DBG1(DBG_KNL, "kernel_vpp: %s: src %s:%d dst %s:%d "
 					"spi %u proto %u mark val %u mask %x",
 		  (msg) ? msg : __func__,
 		  srcaddr, id->src->get_port(id->src),
@@ -276,8 +307,9 @@ get_routed_sa_sw_if_index(private_kernel_vpp_ipsec_t *this, u32 inst_num)
 
 	snprintf(intf_name, sizeof(intf_name) - 1, "ipip%u", inst_num);
 
-	vmgmt_intf_mark_dirty();
-	sw_if_index = vmgmt_intf_get_sw_if_index_by_name(intf_name);
+	vmgmt2_if_details_cache_mark_dirty();
+	vmgmt2_if_details_dump(~0);
+	sw_if_index = vmgmt2_if_name_to_index(intf_name);
 
 	return sw_if_index;
 }
@@ -465,98 +497,99 @@ ipsec_tunnel_protect_sa_is_dummy(u32 sa_id, u32 sw_if_index, u8 is_outbound)
  * Lock must be acquired before this function is called.
  */
 static int
-ipsec_tunnel_protect_add_sa(u32 sw_if_index, vmgmt_ipsec_sa_t *sa_new)
+ipsec_tunnel_protect_add_sa(u32 if_index,
+			    vapi_type_ipsec_sad_entry_v3 *sa_new)
 {
-	vmgmt_ipsec_tunnel_protect_t *tp_curr = NULL, tp_new;
-	int ret, del_old = 0;
-	u32 old_sa_id;
+	vapi_payload_ipsec_tunnel_protect_details *tp_old = NULL;
+	vapi_type_ipsec_tunnel_protect tp_new;
+	int ret, del_old = 0, outbound = 0;
+	u32 old_sa_id = ~0;
+	u32 *sas_in_new, *sas_in_old = NULL;
 
-	ret = vmgmt_ipsec_tunnel_protect_get(sw_if_index, &tp_curr);
-	if ((ret != 0) || (tp_curr == NULL)) {
+	ret = vmgmt2_ipsec_tunnel_protect_get(if_index, &tp_old, &sas_in_old);
+	if ((ret != 0) || (tp_old == NULL) || (sas_in_old == NULL)) {
 		DBG1(DBG_KNL,
 		     "kernel_vpp: %s: interface %u: SAs not found: %d",
-		     __func__, sw_if_index, ret);
+		     __func__, if_index, ret);
 		return ret;
 	}
 
-	memcpy(&tp_new, tp_curr, sizeof(tp_new));
-	tp_new.sa_in = tnsr_vec_dup(tp_curr->sa_in);
+	memcpy(&tp_new, &tp_old->tun, sizeof(tp_new));
+	sas_in_new = tnsr_vec_dup(sas_in_old);
 
-	if (sa_new->outbound) {
+	if (!(sa_new->flags & IPSEC_API_SAD_FLAG_IS_INBOUND)) {
 
 		DBG1(DBG_KNL,
 		     "kernel_vpp: %s: "
 		     "interface %u: replace outbound SA (%u -> %u)",
-		     __func__, sw_if_index, tp_new.sa_out, sa_new->sa_id);
+		     __func__, if_index, tp_new.sa_out, sa_new->sad_id);
 
 		/* Delete old outbound SA ID if it was a dummy */
 		old_sa_id = tp_new.sa_out;
-		if (ipsec_tunnel_protect_sa_is_dummy (old_sa_id, sw_if_index,
+		if (ipsec_tunnel_protect_sa_is_dummy (old_sa_id, if_index,
 						      1 /* is_outbound */)) {
 			del_old = 1;
 		}
-		tp_new.sa_out = sa_new->sa_id;
+		tp_new.sa_out = sa_new->sad_id;
+		outbound = 1;
 
 	} else {
 
 		/* If only existing inbound SA is a dummy, delete it */
-		if (tp_new.sa_in) {
-			old_sa_id = tp_new.sa_in[0];
+		if (sas_in_old && (tnsr_vec_len(sas_in_old) > 0)) {
+			old_sa_id = tnsr_vec_elt(sas_in_old, 0);
 		}
-		if ((tnsr_vec_len(tp_new.sa_in) == 1) &&
-		    ipsec_tunnel_protect_sa_is_dummy (old_sa_id, sw_if_index,
+		if ((tnsr_vec_len(sas_in_old) == 1) &&
+		    ipsec_tunnel_protect_sa_is_dummy (old_sa_id, if_index,
 						      0 /* is_outbound */)) {
 
-			DBG1(DBG_KNL, "kernel_vpp: %s: "
-			     "interface %u: replace inbound SA (%u -> %u)",
-			     __func__, sw_if_index, tp_new.sa_in[0],
-			     sa_new->sa_id);
+			DBG1(DBG_KNL,
+			     "%s: interface %u: replace inbound SA (%u -> %u)",
+			     __func__, if_index, old_sa_id, sa_new->sad_id);
 
 			del_old = 1;
-			tnsr_vec_reset_length(tp_new.sa_in);
+			tnsr_vec_reset_length(sas_in_new);
 		} else {
-			DBG1(DBG_KNL, "kernel_vpp: %s: "
-			     "interface %u: appending inbound SA %u",
-			     __func__, sw_if_index, sa_new->sa_id);
+			DBG1(DBG_KNL,
+			     "%s: interface %u: appending inbound SA %u",
+			     __func__, if_index, sa_new->sad_id);
 		}
 
 		/* append to inbound SAs */
-		tnsr_vec_add1(tp_new.sa_in, sa_new->sa_id);
+		tnsr_vec_add1(sas_in_new, sa_new->sad_id);
+
+		/* maximum of 4 inbound SAs can be set. delete extras */
+		if (tnsr_vec_len(sas_in_new) > 4) {
+			tnsr_vec_delete(sas_in_new,
+					tnsr_vec_len(sas_in_new) - 4, 0);
+		}
 	}
 
-	ret = vmgmt_ipsec_sa_add(sa_new, NULL);
+	ret = vmgmt2_ipsec_sa_add(sa_new);
+	if (ret != 0) {
+		DBG1(DBG_KNL, "%s: interface %u: add SA %u failed: %d",
+		     __func__, if_index, sa_new->sad_id, ret);
+		return ret;
+	}
+
+	ret = vmgmt2_ipsec_tunnel_protect_update(&tp_new, sas_in_new);
+	tnsr_vec_free(sas_in_new);
+
 	if (ret != 0) {
 		DBG1(DBG_KNL,
-		     "kernel_vpp: %s: interface %u: add SA %u failed: %d",
-		     __func__, sw_if_index, sa_new->sa_id, ret);
+		     "%s: interface %u: tunnel protect update failed: %d",
+		     __func__, if_index, ret);
 		return ret;
 	}
 
-	ret = vmgmt_ipsec_tunnel_protect_update(&tp_new);
-	tnsr_vec_free(tp_new.sa_in);
+	if (del_old && (old_sa_id != sa_new->sad_id)) {
 
-	if (ret != 0) {
-		DBG1(DBG_KNL, "kernel_vpp: %s: "
-		     "interface %u: ipsec tunnel protect update failed: %d",
-		     __func__, sw_if_index, ret);
-		return ret;
-	}
+		DBG1(DBG_KNL,
+		     "%s: interface %u: delete replaced SA %u (%s)",
+		     __func__, if_index, old_sa_id,
+		     (outbound) ? "outbound" : "inbound");
 
-	if (del_old && (old_sa_id != sa_new->sa_id)) {
-		vmgmt_ipsec_sa_t *sa_curr = NULL;
-
-		DBG1(DBG_KNL, "kernel_vpp: %s: "
-		     "Interface %u: delete replaced SA %u (%s)",
-		     __func__, sw_if_index, old_sa_id,
-		     (sa_new->outbound) ? "outbound" : "inbound");
-
-		vmgmt_ipsec_sa_get(old_sa_id, &sa_curr);
-		if (sa_curr) {
-			DBG1(DBG_KNL, "kernel_vpp: %s: "
-			     "Interface %u: SA %u found during deletion of %u",
-			     __func__, sw_if_index, sa_curr->sa_id, old_sa_id);
-			vmgmt_ipsec_sa_del(sa_curr, 0);
-		}
+		vmgmt2_ipsec_sa_del(old_sa_id);
 	}
 
 	return 0;
@@ -577,14 +610,14 @@ add_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 {
 	int ret = -1;
 	u32 inst_num, sw_if_index;
-	vmgmt_ipsec_sa_t sa_conf;
+	vapi_type_ipsec_sad_entry_v3 sa_conf;
 
 	inst_num = id->mark.value - 1;
 
-	this->mutex->lock(this->mutex);
-
 	memset(&sa_conf, 0, sizeof(sa_conf));
-	convert_sa_to_vmgmt(&sa_conf, id, data);
+	convert_sa_to_vapi(&sa_conf, id, data);
+
+	this->mutex->lock(this->mutex);
 
 	sw_if_index = get_routed_sa_sw_if_index(this, inst_num);
 	if (sw_if_index  == ~0) {
@@ -676,8 +709,8 @@ query_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 
 	this->mutex->lock(this->mutex);
 
-	ret = vmgmt_ipsec_sa_get_counters(ntohl(id->spi), bytes, packets,
-					  &ts_last_used);
+	ret = vmgmt2_ipsec_sa_get_counters(ntohl(id->spi), packets, bytes,
+					   &ts_last_used);
 	this->mutex->unlock(this->mutex);
 
 	ts_epoch_to_monotonic(ts_last_used, time);
@@ -721,43 +754,45 @@ METHOD(kernel_ipsec_t, query_sa, status_t,
  * Lock must be acquired before this function is called.
  */
 static void
-ipsec_tunnel_protect_del_sa(u32 sw_if_index, u32 sa_id)
+ipsec_tunnel_protect_del_sa(u32 if_index, u32 sa_id)
 {
-	vmgmt_ipsec_tunnel_protect_t *tp_curr = NULL, tp_new;
-	vmgmt_ipsec_sa_t *sa_curr = NULL, sa_copy;
+	vapi_payload_ipsec_tunnel_protect_details *tp_old = NULL;
+	vapi_type_ipsec_tunnel_protect tp_new;
+	vapi_payload_ipsec_sa_v3_details *sa_old = NULL;
+	vapi_type_ipsec_sad_entry_v3 sa_new;
 	int ret, replace_old = 0;
 	u32 sa_in_index;
+	u32 *sas_in_new, *sas_in_old = NULL;
 
-	ret = vmgmt_ipsec_tunnel_protect_get(sw_if_index, &tp_curr);
-	if ((ret != 0) || (tp_curr == NULL)) {
-		DBG1(DBG_KNL,
-		     "kernel_vpp: %s: interface %u: SAs not found: %d",
-		     __func__, sw_if_index, ret);
+	ret = vmgmt2_ipsec_tunnel_protect_get(if_index, &tp_old, &sas_in_old);
+	if (ret || !tp_old || !sas_in_old) {
+		DBG1(DBG_KNL, "%s: interface %u: SAs not found: %d",
+		     __func__, if_index, ret);
 		return;
 	}
 
-	memcpy(&tp_new, tp_curr, sizeof(tp_new));
-	tp_new.sa_in = tnsr_vec_dup(tp_curr->sa_in);
+	memcpy(&tp_new, &tp_old->tun, sizeof(tp_new));
+	sas_in_new = tnsr_vec_dup(sas_in_old);
 
 	/* Get existing SA data */
-	vmgmt_ipsec_sa_get(sa_id, &sa_curr);
-	if (sa_curr) {
-		memcpy(&sa_copy, sa_curr, sizeof(sa_copy));
+	sa_old = vmgmt2_ipsec_sa_get(sa_id);
+	if (sa_old) {
+		memcpy(&sa_new, &sa_old->entry, sizeof(sa_new));
 	} else {
 		DBG1(DBG_KNL,
-		     "kernel_vpp: %s: interface %u: SA %u not found",
-		     __func__, sw_if_index, sa_id);
-		memset(&sa_copy, 0, sizeof(sa_copy));
-		sa_copy.sa_id = sa_id;
-		sa_copy.spi = sa_id;
+		     "%s: interface %u: SA %u not found",
+		     __func__, if_index, sa_id);
+		memset(&sa_new, 0, sizeof(sa_new));
+		sa_new.sad_id = sa_id;
+		sa_new.spi = sa_id;
 	}
 
 	/* not found on interface, skip interface update and just delete */
-	sa_in_index = tnsr_vec_search(tp_new.sa_in, sa_id);
+	sa_in_index = tnsr_vec_search(sas_in_new, sa_id);
 	if ((sa_id != tp_new.sa_out) && (sa_in_index == ~0)) {
 		DBG1(DBG_KNL,
 		     "kernel_vpp: %s: interface %u: SA %u not protecting",
-		     __func__, sw_if_index, sa_id);
+		     __func__, if_index, sa_id);
 		goto del_curr_sa;
 	}
 
@@ -766,72 +801,68 @@ ipsec_tunnel_protect_del_sa(u32 sw_if_index, u32 sa_id)
 
 		replace_old = 1;
 
-		sa_copy.sa_id =
-			ipsec_tunnel_protect_dummy_sa_id (sw_if_index,
+		sa_new.sad_id =
+			ipsec_tunnel_protect_dummy_sa_id (if_index,
 							  1 /* is_outbound */);
-		sa_copy.spi = sa_copy.sa_id;
-		sa_copy.crypto_alg = 0;
-		sa_copy.integ_alg = 0;
-		sa_copy.outbound = 1;
+		sa_new.spi = sa_new.sad_id;
+		sa_new.crypto_algorithm = 0;
+		sa_new.integrity_algorithm = 0;
+		sa_new.flags &= ~IPSEC_API_SAD_FLAG_IS_INBOUND;
 
-		tp_new.sa_out = sa_copy.sa_id;
+		tp_new.sa_out = sa_new.sad_id;
 
 		DBG1(DBG_KNL,
-		     "kernel_vpp: %s: interface %u: "
-		     "Replace outbound SA (%u -> %u)",
-		     __func__, sw_if_index, sa_id, sa_copy.sa_id);
+		     "%s: interface %u: replace outbound SA (%u -> %u)",
+		     __func__, if_index, sa_id, sa_new.sad_id);
 
-	/* only one inbound SA, replace it */
-	} else if (tnsr_vec_len(tp_new.sa_in) == 1) {
+	/* only one inbound SA, replace it with a dummy SA */
+	} else if (tnsr_vec_len(sas_in_new) == 1) {
 
 		replace_old = 1;
 
-		sa_copy.sa_id =
-			ipsec_tunnel_protect_dummy_sa_id (sw_if_index,
+		sa_new.sad_id =
+			ipsec_tunnel_protect_dummy_sa_id (if_index,
 							  0 /* is_outbound */);
-		sa_copy.spi = sa_copy.sa_id;
-		sa_copy.crypto_alg = 0;
-		sa_copy.integ_alg = 0;
-		sa_copy.outbound = 0;
+		sa_new.spi = sa_new.sad_id;
+		sa_new.crypto_algorithm = 0;
+		sa_new.integrity_algorithm = 0;
+		sa_new.flags |= IPSEC_API_SAD_FLAG_IS_INBOUND;
 
-		tp_new.sa_in[0] = sa_copy.sa_id;
+		tnsr_vec_reset_length(sas_in_new);
+		tnsr_vec_add1(sas_in_new, sa_new.sad_id);
 
-		DBG1(DBG_KNL, "kernel_vpp: %s: interface %u: "
-		     "Replace inbound SA (%u -> %u)",
-		     __func__, sw_if_index, sa_id, sa_copy.sa_id);
+		DBG1(DBG_KNL,
+		     "%s: interface %u: replace inbound SA (%u -> %u)",
+		     __func__, if_index, sa_id, sa_new.sad_id);
+	/* Multiple inbound SAs, just remove it from the interface */
 	} else {
 
-		DBG1(DBG_KNL, "kernel_vpp: %s: interface %u: "
-		     "Removing inbound SA %u",
-		     __func__, sw_if_index, sa_id);
+		DBG1(DBG_KNL, "%s: interface %u: removing inbound SA %u",
+		     __func__, if_index, sa_id);
 
-		tnsr_vec_delete(tp_new.sa_in, 1, sa_in_index);
+		tnsr_vec_delete(sas_in_new, 1, sa_in_index);
 	}
 
 	/* Replacing outbound SA, or only inbound SA, add replacement first */
 	if (replace_old) {
-		vmgmt_ipsec_sa_add(&sa_copy, NULL);
+		vmgmt2_ipsec_sa_add(&sa_new);
 	}
 		
 
-	ret = vmgmt_ipsec_tunnel_protect_update(&tp_new);
-	tnsr_vec_free(tp_new.sa_in);
-
+	ret = vmgmt2_ipsec_tunnel_protect_update(&tp_new, sas_in_new);
 	if (ret != 0) {
 		DBG1(DBG_KNL, "kernel_vpp: %s: interface %u"
 		     "Failed to update SAs: %d",
-		     __func__, sw_if_index, ret);
+		     __func__, if_index, ret);
 	}
 
 del_curr_sa:
-	if (sa_curr) {
-		DBG1(DBG_KNL, "kernel_vpp: %s: interface %u: Deleting SA %u",
-		     __func__, sw_if_index, sa_id);
+	tnsr_vec_free(sas_in_new);
+	if (sa_old) {
+		DBG1(DBG_KNL, "%s: interface %u: Deleting SA %u",
+		     __func__, if_index, sa_id);
 
-		/* Use local copy. Put IDs back in case they were changed */
-		sa_copy.sa_id = sa_id;
-		sa_copy.spi = sa_id;
-		vmgmt_ipsec_sa_del(&sa_copy, 0);
+		vmgmt2_ipsec_sa_del(sa_id);
 	}
 
 	return;
@@ -914,15 +945,15 @@ METHOD(kernel_ipsec_t, add_policy, status_t,
 
 static int
 query_routed_policy(private_kernel_vpp_ipsec_t *this,
-					kernel_ipsec_policy_id_t *id,
-					kernel_ipsec_query_policy_t *data, time_t *use_time)
+		    kernel_ipsec_policy_id_t *id,
+		    kernel_ipsec_query_policy_t *data, time_t *use_time)
 {
 	int ret = -1;
 	u32 inst_num, sw_if_index;
 	int outbound = 0;
-	vmgmt_ipsec_tunnel_protect_t *tp = NULL;
+	vapi_payload_ipsec_tunnel_protect_details *tp = NULL;
 	time_t ts_sa, ts_max = 0;
-	u32 *sa_ids = 0, *sa_id;
+	u32 *sas_in = NULL, *sa_ids = NULL, *sa_id;
 
 	inst_num = id->mark.value - 1;
 
@@ -934,29 +965,30 @@ query_routed_policy(private_kernel_vpp_ipsec_t *this,
 
 	sw_if_index = get_routed_sa_sw_if_index(this, inst_num);
 	if (sw_if_index  == ~0) {
-                DBG1(DBG_KNL,
-		     "kernel_vpp: %s: No interface found for tunnel %u",
+                DBG1(DBG_KNL, "%s: No interface found for tunnel %u",
 		     __func__, inst_num);
 		goto done;
 	}
 
-	ret = vmgmt_ipsec_tunnel_protect_get(sw_if_index, &tp);
-	if ((ret != 0) || (tp == NULL)) {
-		DBG1(DBG_KNL,
-		     "kernel_vpp: %s: interface %u: SAs not found: %d",
+	ret = vmgmt2_ipsec_tunnel_protect_get(sw_if_index, &tp, &sas_in);
+	if (ret || !tp || !sas_in) {
+		DBG1(DBG_KNL, "%s: interface %u: SAs not found: %d",
 		     __func__, sw_if_index, ret);
 		goto done;
 	}
 
 	if (outbound) {
-		tnsr_vec_add1(sa_ids, tp->sa_out);
+		tnsr_vec_add1(sa_ids, tp->tun.sa_out);
 	} else {
-		sa_ids = tnsr_vec_dup(tp->sa_in);
+		sa_ids = tnsr_vec_dup(sas_in);
 	}
 
 	tnsr_vec_foreach(sa_id, sa_ids) {
-		ret = vmgmt_ipsec_sa_get_counters(*sa_id, 0, 0, &ts_sa);
-		if (!ret && use_time && (ts_sa > ts_max)) {
+		u64 bytes, pkts;
+
+		ret = vmgmt2_ipsec_sa_get_counters(*sa_id, &pkts, &bytes,
+						   &ts_sa);
+		if (!ret && (ts_sa > ts_max)) {
 			ts_max = ts_sa;
 		}
 	}
@@ -1019,7 +1051,7 @@ METHOD(kernel_ipsec_t, destroy, void,
 	this->mutex->destroy(this->mutex);
 	this->rng->destroy(this->rng);
 
-	vmgmt_disconnect();
+	vmgmt2_disconnect();
 	free(this);
 }
 
@@ -1051,7 +1083,7 @@ kernel_vpp_ipsec_t *kernel_vpp_ipsec_create()
 			.rng = lib->crypto->create_rng(lib->crypto, RNG_WEAK),
 	);
 
-	if (vmgmt_init("iked_ipsec", 0) < 0) {
+	if (vmgmt2_init("ss_kernel_vpp") < 0) {
 		DBG1(DBG_KNL, "Connection to VPP API failed");
 	}
 
