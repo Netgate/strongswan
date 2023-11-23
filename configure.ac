@@ -22,7 +22,7 @@
 
 AC_INIT([strongSwan],[m4_esyscmd([./extras/scripts/version | tr -d '\n'])])
 AM_INIT_AUTOMAKE(m4_esyscmd([
-	echo tar-pax
+	echo tar-ustar
 	echo subdir-objects
 	case `automake --version | head -n 1` in
 		*" 1.9"*);;
@@ -39,7 +39,6 @@ AC_DEFINE([CONFIG_H_INCLUDED], [], [defined if config.h included])
 AC_DISABLE_STATIC
 PKG_PROG_PKG_CONFIG
 
-m4_include(m4/macros/pkg-check-var.m4)
 m4_include(m4/macros/split-package-version.m4)
 SPLIT_PACKAGE_VERSION
 
@@ -1192,7 +1191,7 @@ if test x$openssl = xtrue; then
 	if test "x$windows" = xtrue; then
 		openssl_lib=eay32
 		AC_CHECK_LIB([$openssl_lib],[EVP_CIPHER_CTX_new],[LIBS="$LIBS"],
-			[AC_MSG_RESULT([no]);openssl_lib=""],[$DLLIB])
+			[openssl_lib=""],[$DLLIB])
 	fi
 	if test -z "$openssl_lib"; then
 		openssl_lib=crypto
@@ -1483,7 +1482,6 @@ case "$GIT_VERSION" in
 		;;
 	*)
 		AC_MSG_RESULT([$GIT_VERSION])
-#		AC_MSG_ERROR([$PACKAGE_VERSION is not a prefix of $GIT_VERSION, tag missing?])
 		;;
 esac
 
@@ -1529,7 +1527,6 @@ m4_include(m4/macros/add-plugin.m4)
 
 # plugin lists for all components
 charon_plugins=
-starter_plugins=
 pool_plugins=
 attest_plugins=
 pki_plugins=
@@ -1617,11 +1614,11 @@ ADD_PLUGIN([load-tester],          [c charon])
 ADD_PLUGIN([kernel-libipsec],      [c charon cmd])
 ADD_PLUGIN([kernel-wfp],           [c charon])
 ADD_PLUGIN([kernel-iph],           [c charon])
-ADD_PLUGIN([kernel-pfkey],         [c charon starter nm cmd])
-ADD_PLUGIN([kernel-pfroute],       [c charon starter nm cmd])
-ADD_PLUGIN([kernel-netlink],       [c charon starter nm cmd])
-ADD_PLUGIN([kernel-vpp],           [c charon starter nm cmd])
-ADD_PLUGIN([selinux],              [c charon starter nm cmd])
+ADD_PLUGIN([kernel-pfkey],         [c charon nm cmd])
+ADD_PLUGIN([kernel-pfroute],       [c charon nm cmd])
+ADD_PLUGIN([kernel-netlink],       [c charon nm cmd])
+ADD_PLUGIN([kernel-vpp],           [c charon nm cmd])
+ADD_PLUGIN([selinux],              [c charon nm cmd])
 ADD_PLUGIN([resolve],              [c charon cmd])
 ADD_PLUGIN([save-keys],            [c])
 ADD_PLUGIN([socket-default],       [c charon nm cmd])
@@ -1691,7 +1688,6 @@ ADD_PLUGIN([unity],                [c charon])
 ADD_PLUGIN([counters],             [c charon])
 
 AC_SUBST(charon_plugins)
-AC_SUBST(starter_plugins)
 AC_SUBST(pool_plugins)
 AC_SUBST(attest_plugins)
 AC_SUBST(pki_plugins)

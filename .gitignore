@@ -53,5 +53,7 @@ coverage/
 /*.includes
 test-driver
 nbproject/
+
+# TNSR items
 build-root
 .version

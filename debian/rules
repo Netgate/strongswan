@@ -17,10 +17,8 @@ LDFLAGS+=-L$(LIBTNSRINFRA_DIR)/usr/lib/${DEB_HOST_MULTIARCH}
 endif
 
 CONFIGUREARGS := --libdir=/usr/lib --libexecdir=/usr/lib \
-		--enable-addrblock \
 		--enable-agent \
 		--enable-ccm \
-		--enable-certexpire \
 		--enable-chapoly \
 		--enable-cmd \
 		--enable-ctr \
@@ -36,14 +34,9 @@ CONFIGUREARGS := --libdir=/usr/lib --libexecdir=/usr/lib \
 		--enable-eap-tls \
 		--enable-eap-tnc \
 		--enable-eap-ttls \
-		--enable-error-notify \
-		--enable-forecast \
 		--enable-gcm \
 		--enable-gcrypt \
-		--enable-ha \
-		--enable-kernel-libipsec \
 		--enable-ldap \
-		--enable-led \
 		--enable-lookip \
 		--enable-mediation \
 		--enable-ntru \
@@ -87,7 +80,6 @@ ifeq ($(DEB_HOST_ARCH_OS),linux)
 	CONFIGUREARGS += --enable-nm \
 		--with-nm-ca-dir=/etc/ssl/certs \
 		--with-capabilities=libcap \
-		--enable-dhcp \
 		--enable-af-alg \
 		--enable-connmark \
 		--enable-systemd --enable-swanctl
@@ -131,9 +123,6 @@ ifeq ($(DEB_HOST_ARCH_OS),linux)
 	dh_install -p netgate-libstrongswan-standard-plugins usr/lib/ipsec/plugins/libstrongswan-connmark.so
 	dh_install -p netgate-libstrongswan-standard-plugins usr/share/strongswan/templates/config/plugins/connmark.conf
 	dh_install -p netgate-libstrongswan-standard-plugins etc/strongswan.d/charon/connmark.conf
-	dh_install -p netgate-libcharon-extra-plugins usr/lib/ipsec/plugins/libstrongswan-dhcp.so
-	dh_install -p netgate-libcharon-extra-plugins usr/share/strongswan/templates/config/plugins/dhcp.conf
-	dh_install -p netgate-libcharon-extra-plugins etc/strongswan.d/charon/dhcp.conf
 
 	dh_install -p netgate-libstrongswan usr/lib/ipsec/plugins/libstrongswan-kernel-netlink.so
 	dh_install -p netgate-libstrongswan usr/share/strongswan/templates/config/plugins/kernel-netlink.conf
@@ -194,7 +183,6 @@ endif
 		-Xmedsrv -Xman3 \
 		-Xlibstrongswan-connmark.so -X connmark.conf \
 		-Xlibstrongswan-kernel- -X kernel- \
-		-Xlibstrongswan-dhcp.so -X dhcp.conf \
 		-Xlibstrongswan-padlock.so -X padlock.conf \
 		-Xlibstrongswan-rdrand.so -X rdrand.conf \
 		-Xlibstrongswan-aesni.so -X aesni.conf \
@@ -220,9 +208,6 @@ endif
 	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/pkcs8/
 	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/private/
 	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/rsa/
-
-	# TNSR doesn't need this service
-	rm -f $(CURDIR)/debian/tmp/lib/systemd/system/strongswan.service
 
 	# this is handled by update-rc.d
 	rm -rf $(CURDIR)/debian/netgate-strongswan-starter/etc/rc?.d

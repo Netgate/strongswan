@@ -15,6 +15,8 @@
 #include <library.h>
 #include <kernel/kernel_ipsec.h>
 
+#include <bus/listeners/listener.h>
+
 #include <stdio.h>
 
 typedef struct kernel_vpp_ipsec_t {
@@ -23,3 +25,6 @@ typedef struct kernel_vpp_ipsec_t {
 
 kernel_vpp_ipsec_t *kernel_vpp_ipsec_create();
 
+typedef struct kernel_vpp_listener_t {
+	listener_t listener;
+} kernel_vpp_listener_t;

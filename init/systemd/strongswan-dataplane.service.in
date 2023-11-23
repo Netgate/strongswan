@@ -1,7 +1,6 @@
 [Unit]
 Description=strongSwan IPsec IKEv1/IKEv2 daemon using swanctl
-Requires=vpp.service
-After=vpp.service
+Requisite=vpp.service
 Requires=tnsr-dataplane-netns.service
 After=tnsr-dataplane-netns.service
 

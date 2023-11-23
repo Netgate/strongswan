@@ -1,2 +1,0 @@
-charon.plugins.kernel-vpp.load := 10
-	Set load value higher so it will load before kernel-netlink

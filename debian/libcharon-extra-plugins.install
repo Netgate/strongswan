@@ -1,6 +1,4 @@
 # libcharon plugins
-usr/lib/ipsec/plugins/libstrongswan-addrblock.so
-usr/lib/ipsec/plugins/libstrongswan-certexpire.so
 usr/lib/ipsec/plugins/libstrongswan-eap-aka.so
 usr/lib/ipsec/plugins/libstrongswan-eap-dynamic.so
 usr/lib/ipsec/plugins/libstrongswan-eap-gtc.so
@@ -11,11 +9,6 @@ usr/lib/ipsec/plugins/libstrongswan-eap-radius.so
 usr/lib/ipsec/plugins/libstrongswan-eap-tls.so
 usr/lib/ipsec/plugins/libstrongswan-eap-tnc.so
 usr/lib/ipsec/plugins/libstrongswan-eap-ttls.so
-usr/lib/ipsec/plugins/libstrongswan-error-notify.so
-usr/lib/ipsec/plugins/libstrongswan-forecast.so
-usr/lib/ipsec/plugins/libstrongswan-ha.so
-usr/lib/ipsec/plugins/libstrongswan-kernel-libipsec.so
-usr/lib/ipsec/plugins/libstrongswan-led.so
 usr/lib/ipsec/plugins/libstrongswan-lookip.so
 #usr/lib/ipsec/plugins/libstrongswan-medsrv.so
 #usr/lib/ipsec/plugins/libstrongswan-medcli.so
@@ -24,8 +17,6 @@ usr/lib/ipsec/plugins/libstrongswan-unity.so
 usr/lib/ipsec/plugins/libstrongswan-xauth-eap.so
 usr/lib/ipsec/plugins/libstrongswan-xauth-pam.so
 # standard configuration files
-usr/share/strongswan/templates/config/plugins/addrblock.conf
-usr/share/strongswan/templates/config/plugins/certexpire.conf
 usr/share/strongswan/templates/config/plugins/eap-aka.conf
 usr/share/strongswan/templates/config/plugins/eap-dynamic.conf
 usr/share/strongswan/templates/config/plugins/eap-gtc.conf
@@ -36,11 +27,6 @@ usr/share/strongswan/templates/config/plugins/eap-radius.conf
 usr/share/strongswan/templates/config/plugins/eap-tls.conf
 usr/share/strongswan/templates/config/plugins/eap-tnc.conf
 usr/share/strongswan/templates/config/plugins/eap-ttls.conf
-usr/share/strongswan/templates/config/plugins/error-notify.conf
-usr/share/strongswan/templates/config/plugins/forecast.conf
-usr/share/strongswan/templates/config/plugins/ha.conf
-usr/share/strongswan/templates/config/plugins/kernel-libipsec.conf
-usr/share/strongswan/templates/config/plugins/led.conf
 usr/share/strongswan/templates/config/plugins/lookip.conf
 #usr/share/strongswan/templates/config/plugins/medsrv.conf
 #usr/share/strongswan/templates/config/plugins/medcli.conf
@@ -50,8 +36,6 @@ usr/share/strongswan/templates/config/plugins/xauth-eap.conf
 usr/share/strongswan/templates/config/plugins/xauth-pam.conf
 usr/share/strongswan/templates/config/strongswan.d/tnc.conf
 etc/strongswan.d/tnc.conf
-etc/strongswan.d/charon/addrblock.conf
-etc/strongswan.d/charon/certexpire.conf
 etc/strongswan.d/charon/eap-aka.conf
 etc/strongswan.d/charon/eap-dynamic.conf
 etc/strongswan.d/charon/eap-gtc.conf
@@ -62,11 +46,6 @@ etc/strongswan.d/charon/eap-radius.conf
 etc/strongswan.d/charon/eap-tls.conf
 etc/strongswan.d/charon/eap-tnc.conf
 etc/strongswan.d/charon/eap-ttls.conf
-etc/strongswan.d/charon/error-notify.conf
-etc/strongswan.d/charon/forecast.conf
-etc/strongswan.d/charon/ha.conf
-etc/strongswan.d/charon/kernel-libipsec.conf
-etc/strongswan.d/charon/led.conf
 etc/strongswan.d/charon/lookip.conf
 #etc/strongswan.d/charon/medsrv.conf
 #etc/strongswan.d/charon/medcli.conf
@@ -77,7 +56,6 @@ etc/strongswan.d/charon/xauth-pam.conf
 debian/usr.lib.ipsec.lookip /etc/apparmor.d/
 # support libs
 #usr/lib/ipsec/libfast.so*
-usr/lib/ipsec/libipsec.so*
 usr/lib/ipsec/libpttls.so*
 usr/lib/ipsec/libradius.so*
 usr/lib/ipsec/libsimaka.so*
@@ -85,7 +63,7 @@ usr/lib/ipsec/libtnccs.so*
 usr/lib/ipsec/libtls.so*
 # binaries
 usr/bin/pt-tls-client
-usr/lib/ipsec/error-notify
+#usr/lib/ipsec/error-notify
 usr/lib/ipsec/lookip
 # manpages
 usr/share/man/man1/pt-tls-client.1

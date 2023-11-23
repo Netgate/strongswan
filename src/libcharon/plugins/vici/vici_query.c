@@ -1,6 +1,4 @@
 /*
- * Copyright 2016-2018 Rubicon Communications, LLC
- *
  * Copyright (C) 2015-2020 Tobias Brunner
  * Copyright (C) 2015-2018 Andreas Steffen
  * Copyright (C) 2014 Martin Willi

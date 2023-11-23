@@ -30,9 +30,11 @@
 
 #include <tnsrinfra/vec.h>
 #include <tnsrinfra/pool.h>
+#include <tnsrinfra/hash.h>
 #include <vppmgmt2/vpp_mgmt2_api.h>
 #include <vppmgmt2/vpp_mgmt2_ipsec.h>
 #include <vppmgmt2/vpp_mgmt2_if.h>
+#include <vppmgmt2/vpp_mgmt2_teib.h>
 
 #define PRIO_BASE 100000
 
@@ -51,33 +53,143 @@ typedef struct private_kernel_vpp_ipsec_t {
 
 } private_kernel_vpp_ipsec_t;
 
-typedef struct sa_entry_t {
-	host_t *src;
-	host_t *dst;
-	ipsec_mode_t mode;
-	uint32_t spi;
-	uint8_t proto;
-	linked_list_t *src_ts, *dst_ts;
-	chunk_t enc_key, int_key;
-	uint16_t enc_alg, int_alg;
-	uint32_t sa_id;
-	uint8_t esn;
-	uint32_t anti_replay;
-	uint8_t outbound;
-	/* fields for routed SAs */
-	mark_t mark;
-	uint32_t tunnel_if_index;
-	uint32_t real_if_index;
-} sa_entry_t;
+typedef struct private_kernel_vpp_listener_t {
+	kernel_vpp_listener_t public;
+} private_kernel_vpp_listener_t;
 
-typedef struct policy_entry_t {
-	uint8_t direction;
-	policy_type_t action;
-	traffic_selector_t *src_ts, *dst_ts;
-	mark_t mark;
-	sa_entry_t *sa;
-	uint32_t priority;
-} policy_entry_t;
+static private_kernel_vpp_ipsec_t *vpp_ipsec;
+
+/* pool of pending tunnel protect updates
+ *
+ * Each pool entry contains a vector of tunnel protect update data to apply
+ * for an outbound SA after it is installed.
+ */
+static vapi_type_ipsec_tunnel_protect **pending_tp_pool;
+
+/* hash of outbound SA ID to pool index */
+static uword *said2poolidx;
+
+
+/* Retrieve a vector of pending updates for an SA ID if one exists. */
+static vapi_type_ipsec_tunnel_protect **
+lookup_pending_tp(u32 sa_id)
+{
+	vapi_type_ipsec_tunnel_protect **tp_vec = NULL;
+	uword *p;
+
+	p = tnsr_hash_get(said2poolidx, sa_id);
+	if (p != NULL) {
+		tp_vec = tnsr_pool_elt_at_index(pending_tp_pool, *p);
+	}
+
+	return tp_vec;
+}
+
+
+/* Add new pending tunnel protect data for an outbound SA */
+static int
+add_pending_tp(vapi_type_ipsec_tunnel_protect *tp)
+{
+	vapi_type_ipsec_tunnel_protect **tp_vec;
+       
+	if (tp == NULL) {
+		return -EINVAL;
+	}
+
+	tp_vec = lookup_pending_tp(tp->sa_out);
+	if (tp_vec == NULL) {
+		tnsr_pool_get_zero(pending_tp_pool, tp_vec);
+		tnsr_hash_set(said2poolidx, tp->sa_out,
+			      tp_vec - pending_tp_pool);
+	}
+
+	tnsr_vec_add1(*tp_vec, *tp);
+
+	return 0;
+}
+
+
+/* Delete the pending tunnel protect data for an outbound SA */
+static void
+del_pending_tp(u32 sa_id)
+{
+	vapi_type_ipsec_tunnel_protect **tp_vec = lookup_pending_tp(sa_id);
+	vapi_type_ipsec_tunnel_protect *tp;
+
+	if (tp_vec == NULL) {
+		return;
+	}
+
+	tnsr_vec_free(*tp_vec);
+	tnsr_hash_unset(said2poolidx, sa_id);
+	tnsr_pool_put(pending_tp_pool, tp_vec);
+}
+
+
+/* After an outbound SA has been added, if there were pending tunnel protect
+ * updates involving that SA, apply them.
+ *
+ * This would happen on a rekey because there is a delay in installing an
+ * outbound child SA.
+ */
+static void
+process_pending_tp(u32 sa_id)
+{
+	vapi_type_ipsec_tunnel_protect **tp_vec = lookup_pending_tp(sa_id);
+	vapi_type_ipsec_tunnel_protect *tp;
+
+	if (tp_vec == NULL) {
+		return;
+	}
+
+	tnsr_vec_foreach(tp, *tp_vec) {
+		vapi_type_ipsec_tunnel_protect *tp_curr = NULL;
+		u32 *sas_in = NULL;
+		vmgmt2_error ret;
+
+		/* Lookup existing tunnel protect data & reuase inbound SAs */
+		ret = vmgmt2_ipsec_tunnel_protect_get(tp->sw_if_index,
+						      &tp->nh, &tp_curr,
+						      &sas_in);
+		if ((ret != VMGMT2_ERR_OK) || (sas_in == NULL)) {
+			DBG1(DBG_KNL,
+			     "%s: tunnel protect lookup failed for SA %u",
+			     __func__, sa_id);
+			continue;
+		}
+
+		ret = vmgmt2_ipsec_tunnel_protect_update(tp, sas_in);
+		if (ret != VMGMT2_ERR_OK) {
+			DBG1(DBG_KNL,
+			     "%s: tunnel protect update failed for SA %u",
+			     __func__, sa_id);
+			continue;
+		}
+	}
+
+	del_pending_tp(sa_id);
+}
+
+
+static void
+destroy_pending_tp(void)
+{
+	vapi_type_ipsec_tunnel_protect **tp_vec;
+
+	tnsr_hash_free(said2poolidx);
+	tnsr_pool_foreach(tp_vec, pending_tp_pool, ({
+		tnsr_vec_free(*tp_vec);
+	}));
+	tnsr_pool_free(pending_tp_pool);
+}
+
+
+static void
+init_pending_tp(void)
+{
+	said2poolidx = tnsr_hash_create(0, sizeof(uword));
+}
+
 
 static int
 kernel_vpp_check_connection(private_kernel_vpp_ipsec_t *this)
@@ -183,6 +295,22 @@ vpp_enc_key_len(int alg, int keybytes)
 {
 	return (alg == ENCR_AES_GCM_ICV16 || alg == ENCR_CHACHA20_POLY1305) ?
 		keybytes - 4 : keybytes;
+}
+
+static int
+convert_host_to_vapi(vapi_type_address *addr, host_t *host)
+{
+	if (!addr || !host) {
+		return -EINVAL;
+	}
+
+	memset(addr, 0, sizeof(*addr));
+	addr->af = (host->get_family(host) == AF_INET6) ?
+			ADDRESS_IP6 : ADDRESS_IP4;
+	memcpy(&addr->un, host->get_address(host).ptr,
+	       host->get_address(host).len);
+
+        return 0;
 }
 
 static int
@@ -306,10 +434,8 @@ get_routed_sa_sw_if_index(private_kernel_vpp_ipsec_t *this, u32 inst_num)
 	u32 sw_if_index;
 
 	snprintf(intf_name, sizeof(intf_name) - 1, "ipip%u", inst_num);
-
-	vmgmt2_if_details_cache_mark_dirty();
-	vmgmt2_if_details_dump(~0);
-	sw_if_index = vmgmt2_if_name_to_index(intf_name);
+	sw_if_index = vmgmt2_if_name_to_index(intf_name,
+					      true /* force_refresh */);
 
 	return sw_if_index;
 }
@@ -486,160 +612,12 @@ ipsec_tunnel_protect_sa_is_dummy(u32 sa_id, u32 sw_if_index, u8 is_outbound)
 	return 0;
 }
 
-/* Add a new SA and set it to protect the tunnel interface.
- *
- * One of the existing ones may also need to be deleted:
- * - only one outbound SA can be set on the interface at a time. So delete
- *   the one being replaced.
- * - If a dummy inbound SA was set on the interface, it needs to be replaced
- *   and deleted.
- *
- * Lock must be acquired before this function is called.
- */
-static int
-ipsec_tunnel_protect_add_sa(u32 if_index,
-			    vapi_type_ipsec_sad_entry_v3 *sa_new)
-{
-	vapi_payload_ipsec_tunnel_protect_details *tp_old = NULL;
-	vapi_type_ipsec_tunnel_protect tp_new;
-	int ret, del_old = 0, outbound = 0;
-	u32 old_sa_id = ~0;
-	u32 *sas_in_new, *sas_in_old = NULL;
-
-	ret = vmgmt2_ipsec_tunnel_protect_get(if_index, &tp_old, &sas_in_old);
-	if ((ret != 0) || (tp_old == NULL) || (sas_in_old == NULL)) {
-		DBG1(DBG_KNL,
-		     "kernel_vpp: %s: interface %u: SAs not found: %d",
-		     __func__, if_index, ret);
-		return ret;
-	}
-
-	memcpy(&tp_new, &tp_old->tun, sizeof(tp_new));
-	sas_in_new = tnsr_vec_dup(sas_in_old);
-
-	if (!(sa_new->flags & IPSEC_API_SAD_FLAG_IS_INBOUND)) {
-
-		DBG1(DBG_KNL,
-		     "kernel_vpp: %s: "
-		     "interface %u: replace outbound SA (%u -> %u)",
-		     __func__, if_index, tp_new.sa_out, sa_new->sad_id);
-
-		/* Delete old outbound SA ID if it was a dummy */
-		old_sa_id = tp_new.sa_out;
-		if (ipsec_tunnel_protect_sa_is_dummy (old_sa_id, if_index,
-						      1 /* is_outbound */)) {
-			del_old = 1;
-		}
-		tp_new.sa_out = sa_new->sad_id;
-		outbound = 1;
-
-	} else {
-
-		/* If only existing inbound SA is a dummy, delete it */
-		if (sas_in_old && (tnsr_vec_len(sas_in_old) > 0)) {
-			old_sa_id = tnsr_vec_elt(sas_in_old, 0);
-		}
-		if ((tnsr_vec_len(sas_in_old) == 1) &&
-		    ipsec_tunnel_protect_sa_is_dummy (old_sa_id, if_index,
-						      0 /* is_outbound */)) {
-
-			DBG1(DBG_KNL,
-			     "%s: interface %u: replace inbound SA (%u -> %u)",
-			     __func__, if_index, old_sa_id, sa_new->sad_id);
-
-			del_old = 1;
-			tnsr_vec_reset_length(sas_in_new);
-		} else {
-			DBG1(DBG_KNL,
-			     "%s: interface %u: appending inbound SA %u",
-			     __func__, if_index, sa_new->sad_id);
-		}
-
-		/* append to inbound SAs */
-		tnsr_vec_add1(sas_in_new, sa_new->sad_id);
-
-		/* maximum of 4 inbound SAs can be set. delete extras */
-		if (tnsr_vec_len(sas_in_new) > 4) {
-			tnsr_vec_delete(sas_in_new,
-					tnsr_vec_len(sas_in_new) - 4, 0);
-		}
-	}
-
-	ret = vmgmt2_ipsec_sa_add(sa_new);
-	if (ret != 0) {
-		DBG1(DBG_KNL, "%s: interface %u: add SA %u failed: %d",
-		     __func__, if_index, sa_new->sad_id, ret);
-		return ret;
-	}
-
-	ret = vmgmt2_ipsec_tunnel_protect_update(&tp_new, sas_in_new);
-	tnsr_vec_free(sas_in_new);
-
-	if (ret != 0) {
-		DBG1(DBG_KNL,
-		     "%s: interface %u: tunnel protect update failed: %d",
-		     __func__, if_index, ret);
-		return ret;
-	}
-
-	if (del_old && (old_sa_id != sa_new->sad_id)) {
-
-		DBG1(DBG_KNL,
-		     "%s: interface %u: delete replaced SA %u (%s)",
-		     __func__, if_index, old_sa_id,
-		     (outbound) ? "outbound" : "inbound");
-
-		vmgmt2_ipsec_sa_del(old_sa_id);
-	}
-
-	return 0;
-
-}
-
-/* Adding routed SA
- * The tunnel interface should already exist. It's name will be of the form
- * ipipX where X = id->mark.value - 1. ifindex could possibly be passed in
- * using new interface index field that was added recently.
- *
- * Add the SA and update the tunnel protect associations so the tunnel uses
- * it.
- */
-static int
-add_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
-	      kernel_ipsec_add_sa_t *data)
-{
-	int ret = -1;
-	u32 inst_num, sw_if_index;
-	vapi_type_ipsec_sad_entry_v3 sa_conf;
-
-	inst_num = id->mark.value - 1;
-
-	memset(&sa_conf, 0, sizeof(sa_conf));
-	convert_sa_to_vapi(&sa_conf, id, data);
-
-	this->mutex->lock(this->mutex);
-
-	sw_if_index = get_routed_sa_sw_if_index(this, inst_num);
-	if (sw_if_index  == ~0) {
-		goto done;
-	}
-
-	ret = ipsec_tunnel_protect_add_sa(sw_if_index, &sa_conf);
-	if (ret == 0) {
-		schedule_expire(this, id, data);
-	}
-
-done:
-	this->mutex->unlock(this->mutex);
-
-	return ret;
-}
-
 METHOD(kernel_ipsec_t, add_sa, status_t,
 		private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 		kernel_ipsec_add_sa_t *data)
 {
 	int ret = 0;
+	vapi_type_ipsec_sad_entry_v3 sa_conf;
 
 	print_sa_add(id, data, __func__);
 
@@ -647,17 +625,25 @@ METHOD(kernel_ipsec_t, add_sa, status_t,
 		return FAILED;
 	}
 
-	if (id->mark.value) {
-		ret = add_routed_sa(this, id, data);
-	}
+	memset(&sa_conf, 0, sizeof(sa_conf));
+	convert_sa_to_vapi(&sa_conf, id, data);
 
-	if (ret < 0) {
+	this->mutex->lock(this->mutex);
+	ret = vmgmt2_ipsec_sa_add(&sa_conf);
+	/* outbound SAs need to be applied after a rekey */
+	if (!ret && !data->inbound) {
+		process_pending_tp(sa_conf.sad_id);
+	}
+	this->mutex->unlock(this->mutex);
+
+	if (ret != 0) {
 		DBG1(DBG_KNL, "kernel_vpp: %s: error adding SA: %d",
 		     __func__, ret);
-		return FAILED;
+	} else {
+		schedule_expire(this, id, data);
 	}
 
-	return SUCCESS;
+	return (ret == 0) ? SUCCESS : FAILED;
 }
 
 /* ts_epoch_to_monotic - convert the last used time to monotonic
@@ -738,165 +724,6 @@ METHOD(kernel_ipsec_t, query_sa, status_t,
 	return SUCCESS;
 }
 
-/* Check the SAs for the interface and remove the one being deleted.
- *
- * We would like to maintain the tunnel protect configuration even when
- * an SA has not been negotiated in at least one direction so that packets
- * routed to the interface will not leak unencrypted. Make sure that if
- * the only outbound SA or the last inbound SA is being deleted, that SAs
- * are still set.
- *
- * We used to just bring the tunnel interface down when this happened and
- * not allow it to be manually brought up or down. That was easier, but
- * people do not like it when an interface refuses to be brought up/down on
- * demand.
- *
- * Lock must be acquired before this function is called.
- */
-static void
-ipsec_tunnel_protect_del_sa(u32 if_index, u32 sa_id)
-{
-	vapi_payload_ipsec_tunnel_protect_details *tp_old = NULL;
-	vapi_type_ipsec_tunnel_protect tp_new;
-	vapi_payload_ipsec_sa_v3_details *sa_old = NULL;
-	vapi_type_ipsec_sad_entry_v3 sa_new;
-	int ret, replace_old = 0;
-	u32 sa_in_index;
-	u32 *sas_in_new, *sas_in_old = NULL;
-
-	ret = vmgmt2_ipsec_tunnel_protect_get(if_index, &tp_old, &sas_in_old);
-	if (ret || !tp_old || !sas_in_old) {
-		DBG1(DBG_KNL, "%s: interface %u: SAs not found: %d",
-		     __func__, if_index, ret);
-		return;
-	}
-
-	memcpy(&tp_new, &tp_old->tun, sizeof(tp_new));
-	sas_in_new = tnsr_vec_dup(sas_in_old);
-
-	/* Get existing SA data */
-	sa_old = vmgmt2_ipsec_sa_get(sa_id);
-	if (sa_old) {
-		memcpy(&sa_new, &sa_old->entry, sizeof(sa_new));
-	} else {
-		DBG1(DBG_KNL,
-		     "%s: interface %u: SA %u not found",
-		     __func__, if_index, sa_id);
-		memset(&sa_new, 0, sizeof(sa_new));
-		sa_new.sad_id = sa_id;
-		sa_new.spi = sa_id;
-	}
-
-	/* not found on interface, skip interface update and just delete */
-	sa_in_index = tnsr_vec_search(sas_in_new, sa_id);
-	if ((sa_id != tp_new.sa_out) && (sa_in_index == ~0)) {
-		DBG1(DBG_KNL,
-		     "kernel_vpp: %s: interface %u: SA %u not protecting",
-		     __func__, if_index, sa_id);
-		goto del_curr_sa;
-	}
-
-	/* if outbound SA being deleted, replace it. */
-	if (tp_new.sa_out == sa_id) {
-
-		replace_old = 1;
-
-		sa_new.sad_id =
-			ipsec_tunnel_protect_dummy_sa_id (if_index,
-							  1 /* is_outbound */);
-		sa_new.spi = sa_new.sad_id;
-		sa_new.crypto_algorithm = 0;
-		sa_new.integrity_algorithm = 0;
-		sa_new.flags &= ~IPSEC_API_SAD_FLAG_IS_INBOUND;
-
-		tp_new.sa_out = sa_new.sad_id;
-
-		DBG1(DBG_KNL,
-		     "%s: interface %u: replace outbound SA (%u -> %u)",
-		     __func__, if_index, sa_id, sa_new.sad_id);
-
-	/* only one inbound SA, replace it with a dummy SA */
-	} else if (tnsr_vec_len(sas_in_new) == 1) {
-
-		replace_old = 1;
-
-		sa_new.sad_id =
-			ipsec_tunnel_protect_dummy_sa_id (if_index,
-							  0 /* is_outbound */);
-		sa_new.spi = sa_new.sad_id;
-		sa_new.crypto_algorithm = 0;
-		sa_new.integrity_algorithm = 0;
-		sa_new.flags |= IPSEC_API_SAD_FLAG_IS_INBOUND;
-
-		tnsr_vec_reset_length(sas_in_new);
-		tnsr_vec_add1(sas_in_new, sa_new.sad_id);
-
-		DBG1(DBG_KNL,
-		     "%s: interface %u: replace inbound SA (%u -> %u)",
-		     __func__, if_index, sa_id, sa_new.sad_id);
-	/* Multiple inbound SAs, just remove it from the interface */
-	} else {
-
-		DBG1(DBG_KNL, "%s: interface %u: removing inbound SA %u",
-		     __func__, if_index, sa_id);
-
-		tnsr_vec_delete(sas_in_new, 1, sa_in_index);
-	}
-
-	/* Replacing outbound SA, or only inbound SA, add replacement first */
-	if (replace_old) {
-		vmgmt2_ipsec_sa_add(&sa_new);
-	}
-		
-
-	ret = vmgmt2_ipsec_tunnel_protect_update(&tp_new, sas_in_new);
-	if (ret != 0) {
-		DBG1(DBG_KNL, "kernel_vpp: %s: interface %u"
-		     "Failed to update SAs: %d",
-		     __func__, if_index, ret);
-	}
-
-del_curr_sa:
-	tnsr_vec_free(sas_in_new);
-	if (sa_old) {
-		DBG1(DBG_KNL, "%s: interface %u: Deleting SA %u",
-		     __func__, if_index, sa_id);
-
-		vmgmt2_ipsec_sa_del(sa_id);
-	}
-
-	return;
-}
-
-/*
- * Deleting routed SA - remove the SA from the interface tunnel protect
- * associations.
- */
-static int
-del_routed_sa(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
-	      kernel_ipsec_del_sa_t *data)
-{
-	int ret = 0;
-	u32 inst_num = id->mark.value - 1;
-	u32 sw_if_index;
-
-	this->mutex->lock(this->mutex);
-
-	/* maybe update the SAs on the interface */
-	sw_if_index = get_routed_sa_sw_if_index(this, inst_num);
-	if (sw_if_index  == ~0) {
-                DBG1(DBG_KNL,
-		     "kernel_vpp: %s: No interface found for tunnel %u",
-		     __func__, inst_num);
-	} else {
-		ipsec_tunnel_protect_del_sa(sw_if_index, ntohl(id->spi));
-	}
-
-	this->mutex->unlock(this->mutex);
-
-	return ret;
-}
-
 METHOD(kernel_ipsec_t, del_sa, status_t,
 		private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 		kernel_ipsec_del_sa_t *data)
@@ -909,10 +736,9 @@ METHOD(kernel_ipsec_t, del_sa, status_t,
 		return FAILED;
 	}
 
-	if (id->mark.value) {
-		ret = del_routed_sa(this, id, data);
-	}
-
+	this->mutex->lock(this->mutex);
+	ret = vmgmt2_ipsec_sa_del(ntohl(id->spi));
+	this->mutex->unlock(this->mutex);
 
 	if (ret < 0) {
 		DBG1(DBG_KNL, "kernel_vpp: %s: SA delete returned %d",
@@ -951,7 +777,7 @@ query_routed_policy(private_kernel_vpp_ipsec_t *this,
 	int ret = -1;
 	u32 inst_num, sw_if_index;
 	int outbound = 0;
-	vapi_payload_ipsec_tunnel_protect_details *tp = NULL;
+	vapi_type_ipsec_tunnel_protect *tp = NULL;
 	time_t ts_sa, ts_max = 0;
 	u32 *sas_in = NULL, *sa_ids = NULL, *sa_id;
 
@@ -970,7 +796,7 @@ query_routed_policy(private_kernel_vpp_ipsec_t *this,
 		goto done;
 	}
 
-	ret = vmgmt2_ipsec_tunnel_protect_get(sw_if_index, &tp, &sas_in);
+	ret = vmgmt2_ipsec_tunnel_protect_get(sw_if_index, NULL, &tp, &sas_in);
 	if (ret || !tp || !sas_in) {
 		DBG1(DBG_KNL, "%s: interface %u: SAs not found: %d",
 		     __func__, sw_if_index, ret);
@@ -978,7 +804,7 @@ query_routed_policy(private_kernel_vpp_ipsec_t *this,
 	}
 
 	if (outbound) {
-		tnsr_vec_add1(sa_ids, tp->tun.sa_out);
+		tnsr_vec_add1(sa_ids, tp->sa_out);
 	} else {
 		sa_ids = tnsr_vec_dup(sas_in);
 	}
@@ -1052,7 +878,373 @@ METHOD(kernel_ipsec_t, destroy, void,
 	this->rng->destroy(this->rng);
 
 	vmgmt2_disconnect();
+	destroy_pending_tp();
 	free(this);
+}
+
+/* Add or delete TEIB entries as virtual IP addresses are allocated or
+ * deallocated.
+ *
+ * Connections are named after the tunnel interface, which allows us to
+ * retrieve the ifindex. 
+ */
+METHOD(listener_t, assign_vips, bool,
+       kernel_vpp_listener_t *this, ike_sa_t *ike_sa, bool assign)
+{
+	char *if_name = ike_sa->get_name(ike_sa);
+	host_t *rhost = ike_sa->get_other_host(ike_sa);
+	host_t *vip;
+	enumerator_t *vip_enum;
+	u32 if_index;
+	vapi_type_teib_entry teib;
+
+	vpp_ipsec->mutex->lock(vpp_ipsec->mutex);
+
+	if_index = vmgmt2_if_name_to_index(if_name, true /* force_refresh */);
+	if (if_index == ~0) {
+		vpp_ipsec->mutex->unlock(vpp_ipsec->mutex);
+		return true;
+	}
+
+	memset(&teib, 0, sizeof(teib));
+	teib.sw_if_index = if_index;
+	convert_host_to_vapi(&teib.nh, rhost);
+
+	vip_enum = ike_sa->create_virtual_ip_enumerator(ike_sa, FALSE);
+	while (vip_enum->enumerate(vip_enum, &vip)) {
+		vmgmt2_error ret;
+		vapi_type_ipsec_tunnel_protect *tp = NULL;
+		u32 *sas_in = NULL;
+
+		convert_host_to_vapi(&teib.peer, vip);
+		vmgmt2_ipsec_tunnel_protect_get(if_index, &teib.peer, &tp,
+						&sas_in);
+		if (assign) {
+			ret = vmgmt2_teib_entry_add(&teib);
+		} else {
+			ret = vmgmt2_teib_entry_del(&teib);
+			vmgmt2_ipsec_tunnel_protect_del(if_index, &teib.peer,
+							0 /* del_sas */);
+		}
+		DBG1(DBG_KNL, "%s: TEIB entry for VIP %H %s on interface %s "
+		     "(local %H remote %H) - status %d",
+		     __func__, vip, (assign) ? "added" : "removed", if_name,
+		     ike_sa->get_my_host(ike_sa), rhost, ret);
+	}
+	vip_enum->destroy(vip_enum);
+	vpp_ipsec->mutex->unlock(vpp_ipsec->mutex);
+
+	return true;
+}
+
+static vapi_type_address *
+convert_ike_sa_vips_to_vapi(ike_sa_t *ike_sa)
+{
+	vapi_type_address *vip_addrs = NULL, *vip_addr;
+	host_t *vip;
+	enumerator_t *vip_enum;
+
+	vip_enum = ike_sa->create_virtual_ip_enumerator(ike_sa, FALSE);
+	while (vip_enum->enumerate(vip_enum, &vip)) {
+                tnsr_vec_add2(vip_addrs, vip_addr, 1);
+		convert_host_to_vapi(vip_addr, vip);
+	}
+	vip_enum->destroy(vip_enum);
+
+	return vip_addrs;
+}
+
+/* If a new child was installed, its SAs were just added. This might be the
+ * first set of SAs or a rekey.
+ * In either case, we will change the outbound SA to be the new one that was
+ * just added.
+ * If there are existing valid (not "dummy") inbound SAs, we will keep those
+ * and add the new one. If there are no existing valid inbound SAs, we will
+ * just use the new one.
+ */
+static int
+tunnel_protect_child_add(u32 if_index, vapi_type_address *nh,
+			 child_sa_t *child_sa)
+{
+	vapi_type_ipsec_tunnel_protect *tp = NULL;
+	vapi_type_ipsec_tunnel_protect tp_new;
+	int ret;
+	u32 *sa, *sas_in_new = NULL, *sas_in = NULL;
+	u32 child_out, child_in;
+	vapi_payload_ipsec_sa_v3_details *sa_details;
+
+	ret = vmgmt2_ipsec_tunnel_protect_get(if_index, nh, &tp, &sas_in);
+	if ((ret != VMGMT2_ERR_OK) && (ret != VMGMT2_ERR_NO_SUCH_ENTRY)) {
+		char addr_str[64];
+
+		memset(addr_str, 0, sizeof(addr_str));
+		if (nh != NULL) {
+			inet_ntop((nh->af == ADDRESS_IP6) ? AF_INET6 : AF_INET,
+				  &nh->un, addr_str, sizeof(addr_str));
+		}
+		DBG1(DBG_KNL, "%s: interface %u (nh %s) lookup failed (%d)",
+		     __func__, if_index, (nh != NULL) ? addr_str : "none",
+		     ret);
+		return ret;
+	}
+
+	child_out = ntohl(child_sa->get_spi(child_sa, FALSE /* inbound */));
+	child_in = ntohl(child_sa->get_spi(child_sa, TRUE /* inbound */));
+
+	memset(&tp_new, 0, sizeof(tp_new));
+	tp_new.sw_if_index = if_index;
+	tp_new.sa_out = child_out;
+	if (nh != NULL) {
+		memcpy(&tp_new.nh, nh, sizeof(*nh));
+	}
+
+	/* On a rekey, the outbound SA probably won't exist at the time the
+	 * child transitions to the installed state. If the outbound SA
+	 * doesn't exist yet, add the tp data to a queue of pending updates
+	 * and keep the existing outbound SA active.
+	 */
+	sa_details = vmgmt2_ipsec_sa_get(child_out);
+	if (sa_details == NULL) {
+		DBG1(DBG_KNL,
+		     "%s: outbound SA %u not found, adding to update queue ",
+		    __func__, child_out);
+		add_pending_tp(&tp_new);
+
+		if (tp != NULL) {
+			tp_new.sa_out = tp->sa_out;
+                } else {
+			tp_new.sa_out =
+				ipsec_tunnel_protect_dummy_sa_id
+                                        (if_index, 1 /* is _outbound */);
+		}
+		DBG1(DBG_KNL, "%s: using outbound SA %u", __func__,
+		     tp_new.sa_out);
+	}
+
+	/* If there were existing non-dummy inbound SAs keep them */
+	tnsr_vec_foreach(sa, sas_in) {
+		if (!ipsec_tunnel_protect_sa_is_dummy(*sa, if_index,
+						      0 /* is_outbound */)) {
+			tnsr_vec_add1(sas_in_new, *sa);
+		}
+	}
+	/* append new inbound and get rid of any extras */
+	tnsr_vec_add1(sas_in_new, child_in);
+	if (tnsr_vec_len(sas_in_new) > 4) {
+		tnsr_vec_delete(sas_in_new, tnsr_vec_len(sas_in_new) - 4, 0);
+	}
+
+	ret = vmgmt2_ipsec_tunnel_protect_update(&tp_new, sas_in_new);
+	if (ret != VMGMT2_ERR_OK) {
+		DBG1(DBG_KNL,
+		     "%s: interface %u: tunnel protect update failed: %d",
+		     __func__, if_index, ret);
+        }
+
+	tnsr_vec_free(sas_in_new);
+
+	return 0;
+}
+
+/* If a child was rekeyed or is about to be deleted, remove it's SAs from the
+ * tun protect data for the interface (+ peer if applicable)
+ */
+static int
+tunnel_protect_child_del(u32 if_index, vapi_type_address *nh,
+			 child_sa_t *child_sa)
+{
+	vapi_type_ipsec_tunnel_protect *tp = NULL;
+	vapi_type_ipsec_tunnel_protect tp_new;
+	int ret;
+	u32 *sa, *sas_in_new = NULL, *sas_in = NULL;
+	u32 child_out, child_in, child_in_index;
+
+	memset(&tp_new, 0, sizeof(tp_new));
+	tp_new.sw_if_index = if_index;
+	ret = vmgmt2_ipsec_tunnel_protect_get(if_index, nh, &tp, &sas_in);
+	if ((ret != VMGMT2_ERR_OK) && (ret != VMGMT2_ERR_NO_SUCH_ENTRY)) {
+		char addr_str[64];
+
+		memset(addr_str, 0, sizeof(addr_str));
+		if (nh != NULL) {
+			inet_ntop((nh->af == ADDRESS_IP6) ? AF_INET6 : AF_INET,
+				  &nh->un, addr_str, sizeof(addr_str));
+		}
+		DBG1(DBG_KNL, "%s: interface %u (nh %s) lookup failed (%d)",
+		     __func__, if_index, (nh != NULL) ? addr_str : "none",
+		     ret);
+		return ret;
+	}
+
+	child_out = ntohl(child_sa->get_spi(child_sa, FALSE /* inbound */));
+	child_in = ntohl(child_sa->get_spi(child_sa, TRUE /* inbound */));
+	child_in_index = tnsr_vec_search(sas_in, child_in);
+
+	/* If neither child SAs currently protecting, do nothing */
+	if ((tp->sa_out != child_out) && (child_in_index == ~0)) {
+		return 0;
+	}
+
+	/* Outbound:
+	 * If this child's SA is protecting, replace with a dummy SA
+	 * Else, just keep whatever SA was already in use
+	 */
+	tp_new.sa_out = (tp->sa_out != child_out) ? tp->sa_out :
+		ipsec_tunnel_protect_dummy_sa_id(if_index, 1 /* is_outbound */);
+	if (nh != NULL) {
+		memcpy(&tp_new.nh, nh, sizeof(*nh));
+	}
+
+	/* Inbound:
+	 * Keep any existing SAs aside from this child's SA
+	 */
+	sas_in_new = tnsr_vec_dup(sas_in);
+	if (child_in_index != ~0) {
+		tnsr_vec_delete(sas_in_new, 1, child_in_index);
+	}
+
+	/* If no inbound SAs, use a dummy */
+	if (tnsr_vec_len(sas_in_new) == 0) {
+		tnsr_vec_add1(sas_in_new,
+			      ipsec_tunnel_protect_dummy_sa_id(if_index, 0 /* is _outbound */));
+	}
+
+	ret = vmgmt2_ipsec_tunnel_protect_update(&tp_new, sas_in_new);
+	if (ret != VMGMT2_ERR_OK) {
+		DBG1(DBG_KNL,
+		     "%s: interface %u: tunnel protect update failed: %d",
+		     __func__, if_index, ret);
+        }
+
+	tnsr_vec_free(sas_in_new);
+
+	return 0;
+}
+
+static int
+tunnel_protect_child_installed(ike_sa_t *ike_sa, child_sa_t *child_sa)
+{
+	char *if_name = ike_sa->get_name(ike_sa);
+	u32 if_index = ~0;
+	int ret = 0;
+	vapi_type_address *vip_addrs, *vip_addr;
+
+	vpp_ipsec->mutex->lock(vpp_ipsec->mutex);
+
+	if_index = vmgmt2_if_name_to_index(if_name, true /* force_refresh */);
+	if (if_index == ~0) {
+		DBG1(DBG_KNL, "%s: Cannot find interface %s", __func__,
+		     if_name);
+		vpp_ipsec->mutex->unlock(vpp_ipsec->mutex);
+		return -ENOENT;
+	}
+
+	vip_addrs = convert_ike_sa_vips_to_vapi(ike_sa);
+	vip_addr = vip_addrs;
+
+	/* P2P will update tunnel protect once
+	 * P2MP will update once for each vip
+	 */
+	do {
+		ret = tunnel_protect_child_add(if_index, vip_addr, child_sa);
+		if ((vip_addr == NULL) || (ret != 0)) {
+			break;
+		}
+		vip_addr++;
+	} while (vip_addr < tnsr_vec_end(vip_addrs));
+
+	vpp_ipsec->mutex->unlock(vpp_ipsec->mutex);
+	tnsr_vec_free(vip_addrs);
+
+	return ret;
+}
+
+static int
+tunnel_protect_child_deleting(ike_sa_t *ike_sa, child_sa_t *child_sa)
+{
+	char *if_name = ike_sa->get_name(ike_sa);
+	u32 if_index = ~0;
+	int ret = 0;
+	vapi_type_address *vip_addrs, *vip_addr;
+
+	vpp_ipsec->mutex->lock(vpp_ipsec->mutex);
+
+	if_index = vmgmt2_if_name_to_index(if_name, true /* force_refresh */);
+	if (if_index == ~0) {
+		DBG1(DBG_KNL, "%s: Cannot find interface %s", __func__,
+		     if_name);
+		vpp_ipsec->mutex->unlock(vpp_ipsec->mutex);
+		return -ENOENT;
+	}
+
+	vip_addrs = convert_ike_sa_vips_to_vapi(ike_sa);
+	vip_addr = vip_addrs;
+
+	/* P2P will update tunnel protect once
+	 * P2MP will update once for each vip
+	 */
+	do {
+		ret = tunnel_protect_child_del(if_index, vip_addr, child_sa);
+		if ((vip_addr == NULL) || (ret != 0)) {
+			break;
+		}
+		vip_addr++;
+	} while (vip_addr < tnsr_vec_end(vip_addrs));
+
+	/* Delete any pending tp updates for the outbound SA */
+	del_pending_tp(ntohl(child_sa->get_spi(child_sa, FALSE /* inbound */)));
+
+	vpp_ipsec->mutex->unlock(vpp_ipsec->mutex);
+	tnsr_vec_free(vip_addrs);
+
+	return ret;
+}
+
+METHOD(listener_t, child_state_change, bool,
+       private_kernel_vpp_listener_t *this, ike_sa_t *ike_sa,
+       child_sa_t *child_sa, child_sa_state_t state)
+{
+	DBG1(DBG_KNL, "%s: child sa %s state %N -> %N : local %H remote %H "
+		      "inbound spi %u outbound spi %u",
+	     __func__, child_sa->get_name(child_sa),
+	     child_sa_state_names, child_sa->get_state(child_sa),
+	     child_sa_state_names, state,
+	     ike_sa->get_my_host(ike_sa), ike_sa->get_other_host(ike_sa),
+	     ntohl(child_sa->get_spi(child_sa, TRUE /* inbound */)),
+	     ntohl(child_sa->get_spi(child_sa, FALSE /* inbound */)));
+
+	switch (state) {
+	case CHILD_INSTALLED:
+		tunnel_protect_child_installed(ike_sa, child_sa);
+		break;
+	case CHILD_REKEYED:
+	case CHILD_DELETING:
+	case CHILD_DESTROYING:
+		tunnel_protect_child_deleting(ike_sa, child_sa);
+		break;
+	default:
+		break;
+	}
+
+	return true;
+}
+
+kernel_vpp_listener_t *kernel_vpp_listener_create()
+{
+	private_kernel_vpp_listener_t *this;
+
+	INIT(this,
+		.public = {
+			.listener = {
+				.assign_vips = _assign_vips,
+				.child_state_change = _child_state_change,
+			},
+		},
+	);
+
+	charon->bus->add_listener(charon->bus, &this->public.listener);
+
+	return &this->public;
 }
 
 kernel_vpp_ipsec_t *kernel_vpp_ipsec_create()
@@ -1087,6 +1279,9 @@ kernel_vpp_ipsec_t *kernel_vpp_ipsec_create()
 		DBG1(DBG_KNL, "Connection to VPP API failed");
 	}
 
+	vpp_ipsec = this;
+	init_pending_tp();
+	kernel_vpp_listener_create();
+
 	return &this->public;
 }
-

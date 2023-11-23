@@ -75,7 +75,6 @@ plugins = \
 	plugins/kernel-netlink.opt \
 	plugins/kernel-pfkey.opt \
 	plugins/kernel-pfroute.opt \
-	plugins/kernel-vpp.opt \
 	plugins/load-tester.opt \
 	plugins/lookip.opt \
 	plugins/ntru.opt \
