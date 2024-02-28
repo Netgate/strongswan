@@ -19,10 +19,7 @@ endif
 CONFIGUREARGS := --libdir=/usr/lib --libexecdir=/usr/lib \
 		--enable-agent \
 		--enable-ccm \
-		--enable-chapoly \
 		--enable-cmd \
-		--enable-ctr \
-		--enable-curl \
 		--enable-eap-aka \
 		--enable-eap-gtc \
 		--enable-eap-dynamic \
@@ -35,19 +32,13 @@ CONFIGUREARGS := --libdir=/usr/lib --libexecdir=/usr/lib \
 		--enable-eap-tnc \
 		--enable-eap-ttls \
 		--enable-gcm \
-		--enable-gcrypt \
-		--enable-ldap \
 		--enable-lookip \
 		--enable-mediation \
-		--enable-ntru \
 		--enable-openssl \
-		--enable-pkcs11 \
-		--enable-test-vectors \
-		--enable-tpm \
-		--enable-tss-tss2 \
 		--enable-unity \
 		--enable-xauth-eap \
 		--enable-xauth-pam \
+		--disable-curve25519 \
 		--disable-blowfish \
 		--disable-fast \
 		--disable-des # BSD-Young license
@@ -67,11 +58,11 @@ include /usr/share/dpkg/architecture.mk
 # the padlock plugin only makes sense on i386
 # AESNI and RdRand only make sense on i386 and amd64
 ifeq ($(DEB_HOST_ARCH_CPU),i386)
-  CONFIGUREARGS += --enable-padlock --enable-rdrand --enable-aesni
+  CONFIGUREARGS += --enable-padlock --enable-aesni
 endif
 
 ifeq ($(DEB_HOST_ARCH_CPU),amd64)
-  CONFIGUREARGS += --enable-rdrand --enable-aesni
+  CONFIGUREARGS += --enable-aesni
 endif
 
 ifeq ($(DEB_HOST_ARCH_OS),linux)
@@ -80,7 +71,6 @@ ifeq ($(DEB_HOST_ARCH_OS),linux)
 	CONFIGUREARGS += --enable-nm \
 		--with-nm-ca-dir=/etc/ssl/certs \
 		--with-capabilities=libcap \
-		--enable-af-alg \
 		--enable-connmark \
 		--enable-systemd --enable-swanctl
 endif
@@ -132,9 +122,6 @@ ifeq ($(DEB_HOST_ARCH_OS),linux)
 	dh_install -p netgate-libstrongswan usr/share/strongswan/templates/config/plugins/kernel-vpp.conf
 	dh_install -p netgate-libstrongswan etc/strongswan.d/charon/kernel-vpp.conf
 
-	dh_install -p netgate-libstrongswan-extra-plugins usr/lib/ipsec/plugins/libstrongswan-af-alg.so
-	dh_install -p netgate-libstrongswan-extra-plugins usr/share/strongswan/templates/config/plugins/af-alg.conf
-	dh_install -p netgate-libstrongswan-extra-plugins etc/strongswan.d/charon/af-alg.conf
 	# the systemd service file only gets generated on Linux
 	dh_install -p netgate-strongswan-starter lib/systemd/system/strongswan-starter.service
 	# XFRM is Linux only
@@ -158,20 +145,12 @@ ifeq ($(DEB_HOST_ARCH_CPU),i386)
 	dh_install -p libstrongswan-extra-plugins usr/share/strongswan/templates/config/plugins/padlock.conf
 	dh_install -p libstrongswan-extra-plugins etc/strongswan.d/charon/padlock.conf
 
-	dh_install -p libstrongswan-extra-plugins usr/lib/ipsec/plugins/libstrongswan-rdrand.so
-	dh_install -p libstrongswan-extra-plugins usr/share/strongswan/templates/config/plugins/rdrand.conf
-	dh_install -p libstrongswan-extra-plugins etc/strongswan.d/charon/rdrand.conf
-
 	dh_install -p libstrongswan-standard-plugins usr/lib/ipsec/plugins/libstrongswan-aesni.so
 	dh_install -p libstrongswan-standard-plugins usr/share/strongswan/templates/config/plugins/aesni.conf
 	dh_install -p libstrongswan-standard-plugins etc/strongswan.d/charon/aesni.conf
 endif
 
 ifeq ($(DEB_HOST_ARCH_CPU), amd64)
-	dh_install -p netgate-libstrongswan-extra-plugins usr/lib/ipsec/plugins/libstrongswan-rdrand.so
-	dh_install -p netgate-libstrongswan-extra-plugins usr/share/strongswan/templates/config/plugins/rdrand.conf
-	dh_install -p netgate-libstrongswan-extra-plugins etc/strongswan.d/charon/rdrand.conf
-
 	dh_install -p netgate-libstrongswan-standard-plugins usr/lib/ipsec/plugins/libstrongswan-aesni.so
 	dh_install -p netgate-libstrongswan-standard-plugins usr/share/strongswan/templates/config/plugins/aesni.conf
 	dh_install -p netgate-libstrongswan-standard-plugins etc/strongswan.d/charon/aesni.conf
@@ -184,9 +163,7 @@ endif
 		-Xlibstrongswan-connmark.so -X connmark.conf \
 		-Xlibstrongswan-kernel- -X kernel- \
 		-Xlibstrongswan-padlock.so -X padlock.conf \
-		-Xlibstrongswan-rdrand.so -X rdrand.conf \
 		-Xlibstrongswan-aesni.so -X aesni.conf \
-		-Xlibstrongswan-af-alg.so -X af-alg.conf \
 		-Xstrongswan-starter.service
 
 	# AppArmor.

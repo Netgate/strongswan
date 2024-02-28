@@ -8,7 +8,7 @@
 #
 # In the container, this may be used to configure strongSwan with TKM support:
 #
-#   /strongswan/configure --disable-defaults --enable-silent-rules --enable-ikev2 --enable-kernel-netlink --enable-openssl --enable-pem --enable-socket-default --enable-swanctl --enable-tkm
+#   /strongswan/configure --disable-defaults --enable-silent-rules --enable-ikev2 --enable-kernel-netlink --enable-pem --enable-pkcs1 --enable-random --enable-sha1 --enable-socket-default --enable-swanctl --enable-tkm
 #
 # The following script can be used to generate private key, CA cert and example
 # config for TKM:
@@ -23,12 +23,12 @@
 #
 #   make -j check TESTS_RUNNERS=tkm TESTS_TKM=1
 
-FROM debian:bullseye
+FROM debian:bookworm
 
 ARG packages="autoconf automake bison build-essential ca-certificates ccache \
 flex gettext git gperf libssl-dev libtool pkg-config \
-gnat gprbuild libahven9-dev libxmlada-schema10-dev libgmpada10-dev \
-libalog6-dev"
+gnat gprbuild libahven11-dev libxmlada-schema12-dev libgmpada12-dev \
+libalog8-dev"
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install -qq -y \
