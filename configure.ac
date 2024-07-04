@@ -1575,7 +1575,7 @@ ADD_PLUGIN([random],               [s charon pki scripts manager medsrv attest n
 ADD_PLUGIN([nonce],                [s charon nm cmd aikgen])
 ADD_PLUGIN([x509],                 [s charon pki scripts attest nm cmd aikgen fuzz])
 ADD_PLUGIN([revocation],           [s charon pki nm cmd])
-ADD_PLUGIN([constraints],          [s charon nm cmd])
+ADD_PLUGIN([constraints],          [s charon pki nm cmd])
 ADD_PLUGIN([acert],                [s charon])
 ADD_PLUGIN([pubkey],               [s charon pki cmd aikgen])
 ADD_PLUGIN([pkcs1],                [s charon pki scripts manager medsrv attest nm cmd aikgen fuzz])
@@ -1877,6 +1877,7 @@ AM_CONDITIONAL(USE_ATTR, test x$attr = xtrue)
 AM_CONDITIONAL(USE_ATTR_SQL, test x$attr_sql = xtrue)
 AM_CONDITIONAL(USE_COUNTERS, test x$counters = xtrue)
 AM_CONDITIONAL(USE_SELINUX, test x$selinux = xtrue)
+AM_CONDITIONAL(USE_PF_HANDLER, test x$dhcp = xtrue -o x$farp = xtrue)
 
 #  other options
 # ---------------

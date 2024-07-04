@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2022 Rubicon Communications, LLC.
+ * Copyright 2016-2024 Rubicon Communications, LLC.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -143,26 +143,35 @@ process_pending_tp(u32 sa_id)
 	}
 
 	tnsr_vec_foreach(tp, *tp_vec) {
-		vapi_type_ipsec_tunnel_protect *tp_curr = NULL;
-		u32 *sas_in = NULL;
+		vmgmt2_ipsec_tp_t *tp_curr = NULL;
 		vmgmt2_error ret;
+		char addr_str[INET6_ADDRSTRLEN] = {0};
 
-		/* Lookup existing tunnel protect data & reuase inbound SAs */
-		ret = vmgmt2_ipsec_tunnel_protect_get(tp->sw_if_index,
-						      &tp->nh, &tp_curr,
-						      &sas_in);
-		if ((ret != VMGMT2_ERR_OK) || (sas_in == NULL)) {
+		inet_ntop((tp->nh.af == ADDRESS_IP6) ?  AF_INET6 : AF_INET,
+			  &tp->nh.un, addr_str, sizeof(addr_str));
+
+		/* Lookup existing tunnel protect data & reuse inbound SAs */
+		ret = vmgmt2_ipsec_tunnel_protect_get2(tp->sw_if_index,
+						       &tp->nh,
+						       false /* force_refresh */,
+						       &tp_curr);
+		if ((ret != VMGMT2_ERR_OK) || (tp_curr->sa_in_vec == NULL)) {
 			DBG1(DBG_KNL,
-			     "%s: tunnel protect lookup failed for SA %u",
-			     __func__, sa_id);
+			     "%s: interface %u (nh %s) lookup failed (%d) "
+			     "for outbound SA %u",
+			     __func__, tp->sw_if_index, addr_str, ret, sa_id);
 			continue;
 		}
 
-		ret = vmgmt2_ipsec_tunnel_protect_update(tp, sas_in);
+		u32 *sa_in_vec = tnsr_vec_dup(tp_curr->sa_in_vec);
+		tp->n_sa_in = tnsr_vec_len(sa_in_vec);
+		ret = vmgmt2_ipsec_tunnel_protect_update(tp, sa_in_vec);
+		tnsr_vec_free(sa_in_vec);
 		if (ret != VMGMT2_ERR_OK) {
 			DBG1(DBG_KNL,
-			     "%s: tunnel protect update failed for SA %u",
-			     __func__, sa_id);
+			     "%s: interface %u (nh %s) update failed (%d) "
+			     "for outbound SA %u",
+			     __func__, tp->sw_if_index, addr_str, ret, sa_id);
 			continue;
 		}
 	}
@@ -447,6 +456,16 @@ typedef struct {
 	u32 delete_delay;
 } vpp_ipsec_sa_expire_t;
 
+static void
+destroy_expire_data(void *data)
+{
+	vpp_ipsec_sa_expire_t *expire = data;
+	kernel_ipsec_sa_id_t *id = &expire->id;
+
+	id->dst->destroy(id->dst);
+	id->src->destroy(id->src);
+	free(expire);
+}
 
 static job_requeue_t
 vpp_ipsec_sa_expire(vpp_ipsec_sa_expire_t *expire)
@@ -456,6 +475,13 @@ vpp_ipsec_sa_expire(vpp_ipsec_sa_expire_t *expire)
 	job_requeue_t ret = JOB_REQUEUE_NONE;
 
 	this->mutex->lock(this->mutex);
+
+	if (vmgmt2_ipsec_sa_get(ntohl(id->spi)) == NULL) {
+		DBG1(DBG_KNL, "%s: SA (src %H dst %H spi %u) not found - "
+		     "skipping %s", __func__, id->src, id->dst, ntohl(id->spi),
+		     (expire->delete) ? "delete" : "rekey");
+		goto done;
+	}
 
 	DBG1(DBG_KNL, "%s: %s SA (src %H dst %H spi %u)", __func__,
 		 (expire->delete) ? "delete" : "rekey",
@@ -468,24 +494,12 @@ vpp_ipsec_sa_expire(vpp_ipsec_sa_expire_t *expire)
 	if (!expire->delete) {
 		if (expire->delete_delay) {
 			ret = JOB_RESCHEDULE(expire->delete_delay);
-			DBG1(DBG_KNL, "%s: SA (src %H dst %H spi %u) delete in %u s "
-				 "if rekey unsuccessful",
-				 __func__, id->src, id->dst, ntohl(id->spi),
-				 expire->delete_delay);
 		}
 		expire->delete = 1;
 		expire->delete_delay = 0;
-	} else {
-		if (id->dst) {
-			id->dst->destroy(id->dst);
-			id->dst = NULL;
-		}
-		if (id->src) {
-			id->src->destroy(id->src);
-			id->src = NULL;
-		}
 	}
 
+done:
 	this->mutex->unlock(this->mutex);
 
 	return ret;
@@ -497,7 +511,7 @@ schedule_expire(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 {
 	callback_job_t *job;
 	vpp_ipsec_sa_expire_t *expire;
-	u32 job_delay;
+	u32 job_delay, job_jitter = 0;
 
 	/* bail if there's no time data */
 	if (!data->lifetime || 
@@ -516,12 +530,16 @@ schedule_expire(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 					.mark = id->mark },
 	);
 
-	job_delay = data->lifetime->time.rekey;
+	if (data->lifetime->time.jitter) {
+		job_jitter = random() % data->lifetime->time.jitter;
+	}
+	job_delay = data->lifetime->time.rekey - job_jitter;
 	expire->delete_delay =
-		data->lifetime->time.life - data->lifetime->time.rekey;
+		(data->lifetime->time.life - data->lifetime->time.rekey) +
+			job_jitter;
 
 	job = callback_job_create((callback_job_cb_t) vpp_ipsec_sa_expire,
-							  expire, (callback_job_cleanup_t) free, NULL);
+				  expire, destroy_expire_data, NULL);
 	lib->scheduler->schedule_job(lib->scheduler, (job_t *) job, job_delay);
 }
 
@@ -534,7 +552,7 @@ schedule_expire(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 METHOD(kernel_ipsec_t, get_features, kernel_feature_t,
 		private_kernel_vpp_ipsec_t *this)
 {
-	return 0;
+	return KERNEL_SA_USE_TIME;
 }
 
 METHOD(kernel_ipsec_t, get_spi, status_t,
@@ -777,7 +795,7 @@ query_routed_policy(private_kernel_vpp_ipsec_t *this,
 	int ret = -1;
 	u32 inst_num, sw_if_index;
 	int outbound = 0;
-	vapi_type_ipsec_tunnel_protect *tp = NULL;
+	vmgmt2_ipsec_tp_t *tp = NULL;
 	time_t ts_sa, ts_max = 0;
 	u32 *sas_in = NULL, *sa_ids = NULL, *sa_id;
 
@@ -796,17 +814,16 @@ query_routed_policy(private_kernel_vpp_ipsec_t *this,
 		goto done;
 	}
 
-	ret = vmgmt2_ipsec_tunnel_protect_get(sw_if_index, NULL, &tp, &sas_in);
-	if (ret || !tp || !sas_in) {
-		DBG1(DBG_KNL, "%s: interface %u: SAs not found: %d",
-		     __func__, sw_if_index, ret);
+	ret = vmgmt2_ipsec_tunnel_protect_get2(sw_if_index, NULL,
+					       false /* force_refresh */, &tp);
+	if (ret || !tp) {
 		goto done;
 	}
 
 	if (outbound) {
-		tnsr_vec_add1(sa_ids, tp->sa_out);
+		tnsr_vec_add1(sa_ids, tp->tp.sa_out);
 	} else {
-		sa_ids = tnsr_vec_dup(sas_in);
+		sa_ids = tnsr_vec_dup(tp->sa_in_vec);
 	}
 
 	tnsr_vec_foreach(sa_id, sa_ids) {
@@ -913,12 +930,12 @@ METHOD(listener_t, assign_vips, bool,
 	vip_enum = ike_sa->create_virtual_ip_enumerator(ike_sa, FALSE);
 	while (vip_enum->enumerate(vip_enum, &vip)) {
 		vmgmt2_error ret;
-		vapi_type_ipsec_tunnel_protect *tp = NULL;
-		u32 *sas_in = NULL;
+		vmgmt2_ipsec_tp_t *tp = NULL;
 
 		convert_host_to_vapi(&teib.peer, vip);
-		vmgmt2_ipsec_tunnel_protect_get(if_index, &teib.peer, &tp,
-						&sas_in);
+		vmgmt2_ipsec_tunnel_protect_get2(if_index, &teib.peer,
+						 false /* force_refresh */,
+						 &tp);
 		if (assign) {
 			ret = vmgmt2_teib_entry_add(&teib);
 		} else {
@@ -966,14 +983,16 @@ static int
 tunnel_protect_child_add(u32 if_index, vapi_type_address *nh,
 			 child_sa_t *child_sa)
 {
-	vapi_type_ipsec_tunnel_protect *tp = NULL;
+	vmgmt2_ipsec_tp_t *tp = NULL;
 	vapi_type_ipsec_tunnel_protect tp_new;
 	int ret;
-	u32 *sa, *sas_in_new = NULL, *sas_in = NULL;
+	u32 *sa, *sas_in_new = NULL;
 	u32 child_out, child_in;
 	vapi_payload_ipsec_sa_v3_details *sa_details;
+	bool force_refresh = (nh == NULL);
 
-	ret = vmgmt2_ipsec_tunnel_protect_get(if_index, nh, &tp, &sas_in);
+	ret = vmgmt2_ipsec_tunnel_protect_get2(if_index, nh, force_refresh,
+					       &tp);
 	if ((ret != VMGMT2_ERR_OK) && (ret != VMGMT2_ERR_NO_SUCH_ENTRY)) {
 		char addr_str[64];
 
@@ -1011,7 +1030,7 @@ tunnel_protect_child_add(u32 if_index, vapi_type_address *nh,
 		add_pending_tp(&tp_new);
 
 		if (tp != NULL) {
-			tp_new.sa_out = tp->sa_out;
+			tp_new.sa_out = tp->tp.sa_out;
                 } else {
 			tp_new.sa_out =
 				ipsec_tunnel_protect_dummy_sa_id
@@ -1022,7 +1041,8 @@ tunnel_protect_child_add(u32 if_index, vapi_type_address *nh,
 	}
 
 	/* If there were existing non-dummy inbound SAs keep them */
-	tnsr_vec_foreach(sa, sas_in) {
+	u32 *sa_in_vec = (tp != NULL) ? tp->sa_in_vec : NULL;
+	tnsr_vec_foreach(sa, sa_in_vec) {
 		if (!ipsec_tunnel_protect_sa_is_dummy(*sa, if_index,
 						      0 /* is_outbound */)) {
 			tnsr_vec_add1(sas_in_new, *sa);
@@ -1033,6 +1053,7 @@ tunnel_protect_child_add(u32 if_index, vapi_type_address *nh,
 	if (tnsr_vec_len(sas_in_new) > 4) {
 		tnsr_vec_delete(sas_in_new, tnsr_vec_len(sas_in_new) - 4, 0);
 	}
+	tp_new.n_sa_in = tnsr_vec_len(sas_in_new);
 
 	ret = vmgmt2_ipsec_tunnel_protect_update(&tp_new, sas_in_new);
 	if (ret != VMGMT2_ERR_OK) {
@@ -1053,15 +1074,17 @@ static int
 tunnel_protect_child_del(u32 if_index, vapi_type_address *nh,
 			 child_sa_t *child_sa)
 {
-	vapi_type_ipsec_tunnel_protect *tp = NULL;
+	vmgmt2_ipsec_tp_t *tp = NULL;
 	vapi_type_ipsec_tunnel_protect tp_new;
 	int ret;
-	u32 *sa, *sas_in_new = NULL, *sas_in = NULL;
+	u32 *sas_in_new = NULL;
 	u32 child_out, child_in, child_in_index;
+	bool force_refresh = (nh == NULL);
 
 	memset(&tp_new, 0, sizeof(tp_new));
 	tp_new.sw_if_index = if_index;
-	ret = vmgmt2_ipsec_tunnel_protect_get(if_index, nh, &tp, &sas_in);
+	ret = vmgmt2_ipsec_tunnel_protect_get2(if_index, nh, force_refresh,
+					       &tp);
 	if ((ret != VMGMT2_ERR_OK) && (ret != VMGMT2_ERR_NO_SUCH_ENTRY)) {
 		char addr_str[64];
 
@@ -1078,10 +1101,13 @@ tunnel_protect_child_del(u32 if_index, vapi_type_address *nh,
 
 	child_out = ntohl(child_sa->get_spi(child_sa, FALSE /* inbound */));
 	child_in = ntohl(child_sa->get_spi(child_sa, TRUE /* inbound */));
-	child_in_index = tnsr_vec_search(sas_in, child_in);
+
+	u32 *sa_in_vec = (tp != NULL) ? tp->sa_in_vec : NULL;
+	child_in_index = tnsr_vec_search(sa_in_vec, child_in);
 
 	/* If neither child SAs currently protecting, do nothing */
-	if ((tp->sa_out != child_out) && (child_in_index == ~0)) {
+	if ((tp != NULL) && (tp->tp.sa_out != child_out) &&
+	    (child_in_index == ~0)) {
 		return 0;
 	}
 
@@ -1089,8 +1115,10 @@ tunnel_protect_child_del(u32 if_index, vapi_type_address *nh,
 	 * If this child's SA is protecting, replace with a dummy SA
 	 * Else, just keep whatever SA was already in use
 	 */
-	tp_new.sa_out = (tp->sa_out != child_out) ? tp->sa_out :
-		ipsec_tunnel_protect_dummy_sa_id(if_index, 1 /* is_outbound */);
+	tp_new.sa_out = ((tp != NULL) && (tp->tp.sa_out != child_out)) ?
+				tp->tp.sa_out :
+				ipsec_tunnel_protect_dummy_sa_id(if_index,
+								 1 /* is_outbound */);
 	if (nh != NULL) {
 		memcpy(&tp_new.nh, nh, sizeof(*nh));
 	}
@@ -1098,7 +1126,7 @@ tunnel_protect_child_del(u32 if_index, vapi_type_address *nh,
 	/* Inbound:
 	 * Keep any existing SAs aside from this child's SA
 	 */
-	sas_in_new = tnsr_vec_dup(sas_in);
+	sas_in_new = tnsr_vec_dup(sa_in_vec);
 	if (child_in_index != ~0) {
 		tnsr_vec_delete(sas_in_new, 1, child_in_index);
 	}
@@ -1108,6 +1136,7 @@ tunnel_protect_child_del(u32 if_index, vapi_type_address *nh,
 		tnsr_vec_add1(sas_in_new,
 			      ipsec_tunnel_protect_dummy_sa_id(if_index, 0 /* is _outbound */));
 	}
+	tp_new.n_sa_in = tnsr_vec_len(sas_in_new);
 
 	ret = vmgmt2_ipsec_tunnel_protect_update(&tp_new, sas_in_new);
 	if (ret != VMGMT2_ERR_OK) {

@@ -1,5 +1,7 @@
-# 2.4.2 #
+# 2.5.1 #
 
-- Increased target SDK to Android 13 and ask for permission to show status notification
-- Enable hardware acceleration in OpenSSL
-- Use a more stable approach to determine source IP
+- Fix for existing shortcuts and automation via Intents
+
+# 2.5.0 #
+
+- Support for managed configurations via enterprise mobility management (EMM)

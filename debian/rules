@@ -17,6 +17,7 @@ LDFLAGS+=-L$(LIBTNSRINFRA_DIR)/usr/lib/${DEB_HOST_MULTIARCH}
 endif
 
 CONFIGUREARGS := --libdir=/usr/lib --libexecdir=/usr/lib \
+		--with-systemdsystemunitdir=/lib/systemd/system \
 		--enable-agent \
 		--enable-ccm \
 		--enable-cmd \
