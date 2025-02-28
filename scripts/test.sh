@@ -4,7 +4,7 @@
 build_botan()
 {
 	# same revision used in the build recipe of the testing environment
-	BOTAN_REV=3.3.0
+	BOTAN_REV=3.6.1
 	BOTAN_DIR=$DEPS_BUILD_DIR/botan
 
 	if test -d "$BOTAN_DIR"; then
@@ -37,7 +37,7 @@ build_botan()
 
 build_wolfssl()
 {
-	WOLFSSL_REV=v5.6.4-stable
+	WOLFSSL_REV=v5.7.4-stable
 	WOLFSSL_DIR=$DEPS_BUILD_DIR/wolfssl
 
 	if test -d "$WOLFSSL_DIR"; then
@@ -47,14 +47,15 @@ build_wolfssl()
 	echo "$ build_wolfssl()"
 
 	WOLFSSL_CFLAGS="-DWOLFSSL_PUBLIC_MP -DWOLFSSL_DES_ECB -DHAVE_AES_ECB \
-					-DHAVE_ECC_BRAINPOOL -DWOLFSSL_MIN_AUTH_TAG_SZ=8"
+					-DHAVE_ECC_BRAINPOOL -DWOLFSSL_MIN_AUTH_TAG_SZ=8 \
+					-DRSA_MIN_SIZE=1024"
 	WOLFSSL_CONFIG="--prefix=$DEPS_PREFIX
 					--disable-crypttests --disable-examples
 					--enable-aesccm --enable-aesctr --enable-camellia
 					--enable-curve25519 --enable-curve448 --enable-des3
 					--enable-ecccustcurves --enable-ed25519 --enable-ed448
-					--enable-keygen --with-max-rsa-bits=8192 --enable-md4
-					--enable-rsapss --enable-sha3 --enable-shake256"
+					--enable-keygen --enable-kyber --with-max-rsa-bits=8192
+					--enable-md4 --enable-rsapss --enable-sha3 --enable-shake256"
 
 	git clone https://github.com/wolfSSL/wolfssl.git $WOLFSSL_DIR &&
 	cd $WOLFSSL_DIR &&
@@ -69,7 +70,7 @@ build_wolfssl()
 
 build_tss2()
 {
-	TSS2_REV=3.2.2
+	TSS2_REV=3.2.3
 	TSS2_PKG=tpm2-tss-$TSS2_REV
 	TSS2_DIR=$DEPS_BUILD_DIR/$TSS2_PKG
 	TSS2_SRC=https://github.com/tpm2-software/tpm2-tss/releases/download/$TSS2_REV/$TSS2_PKG.tar.gz
@@ -127,7 +128,7 @@ build_openssl()
 
 build_awslc()
 {
-	LC_REV=1.23.0
+	LC_REV=1.40.0
 	LC_PKG=aws-lc-$LC_REV
 	LC_DIR=$DEPS_BUILD_DIR/$LC_PKG
 	LC_SRC=https://github.com/aws/aws-lc/archive/refs/tags/v${LC_REV}.tar.gz
@@ -213,10 +214,13 @@ case "$TEST" in
 default)
 	# should be the default, but lets make sure
 	CONFIG="--with-printf-hooks=glibc"
+	if system_uses_openssl3; then
+		prepare_system_openssl $1
+	fi
 	;;
 openssl*)
-	CONFIG="--disable-defaults --enable-pki --enable-openssl --enable-pem"
-	export TESTS_PLUGINS="test-vectors openssl! pem"
+	CONFIG="--disable-defaults --enable-pki --enable-openssl --enable-pem --enable-drbg"
+	export TESTS_PLUGINS="test-vectors openssl! pem drbg"
 	DEPS="libssl-dev"
 	if test "$TEST" = "openssl-3"; then
 		DEPS=""
@@ -234,16 +238,16 @@ gcrypt)
 	DEPS="libgcrypt20-dev"
 	;;
 botan)
-	CONFIG="--disable-defaults --enable-pki --enable-botan --enable-pem --enable-hmac --enable-x509 --enable-constraints"
-	export TESTS_PLUGINS="test-vectors botan! pem hmac x509 constraints"
+	CONFIG="--disable-defaults --enable-pki --enable-botan --enable-pem --enable-hmac --enable-x509 --enable-constraints --enable-drbg"
+	export TESTS_PLUGINS="test-vectors botan! pem hmac x509 constraints drbg"
 	DEPS=""
 	if test "$1" = "build-deps"; then
 		build_botan
 	fi
 	;;
 wolfssl)
-	CONFIG="--disable-defaults --enable-pki --enable-wolfssl --enable-pem --enable-pkcs1 --enable-pkcs8 --enable-x509 --enable-constraints"
-	export TESTS_PLUGINS="test-vectors wolfssl! pem pkcs1 pkcs8 x509 constraints"
+	CONFIG="--disable-defaults --enable-pki --enable-wolfssl --enable-pem --enable-pkcs1 --enable-pkcs8 --enable-x509 --enable-constraints --enable-drbg"
+	export TESTS_PLUGINS="test-vectors wolfssl! pem pkcs1 pkcs8 x509 constraints drbg"
 	# build with custom options to enable all the features the plugin supports
 	DEPS=""
 	if test "$1" = "build-deps"; then
@@ -252,8 +256,11 @@ wolfssl)
 	;;
 printf-builtin)
 	CONFIG="--with-printf-hooks=builtin"
+	if system_uses_openssl3; then
+		prepare_system_openssl $1
+	fi
 	;;
-all|codeql|coverage|sonarcloud|no-dbg)
+all|alpine|codeql|coverage|sonarcloud|no-dbg)
 	if [ "$TEST" = "sonarcloud" ]; then
 		if [ -z "$SONAR_PROJECT" -o -z "$SONAR_ORGANIZATION" -o -z "$SONAR_TOKEN" ]; then
 			echo "The SONAR_PROJECT, SONAR_ORGANIZATION and SONAR_TOKEN" \
@@ -285,14 +292,30 @@ all|codeql|coverage|sonarcloud|no-dbg)
 	if test "$TEST" != "coverage"; then
 		CONFIG="$CONFIG --disable-coverage"
 	else
-		# not actually required but configure checks for it
 		DEPS="$DEPS lcov"
+		TARGET="coverage"
 	fi
 	DEPS="$DEPS libcurl4-gnutls-dev libsoup2.4-dev libunbound-dev libldns-dev
 		  libmysqlclient-dev libsqlite3-dev clearsilver-dev libfcgi-dev
 		  libldap2-dev libpcsclite-dev libpam0g-dev binutils-dev libnm-dev
 		  libgcrypt20-dev libjson-c-dev python3-pip libtspi-dev libsystemd-dev
 		  libselinux1-dev libiptc-dev"
+	if [ "$TEST" = "alpine" ]; then
+		# override the whole list for alpine
+		DEPS="git gmp-dev openldap-dev curl-dev ldns-dev unbound-dev libsoup-dev
+			  tpm2-tss-dev tpm2-tss-sys mariadb-dev wolfssl-dev libgcrypt-dev
+			  botan3-dev pcsc-lite-dev networkmanager-dev linux-pam-dev
+			  iptables-dev libselinux-dev binutils-dev libunwind-dev ruby
+			  py3-setuptools"
+		# musl does not provide backtrace(), so use libunwind
+		CONFIG="$CONFIG --enable-unwind-backtraces"
+		# alpine doesn't have systemd
+		CONFIG="$CONFIG --disable-systemd --disable-cert-enroll-timer"
+		# no TrouSerS either
+		CONFIG="$CONFIG --disable-tss-trousers --disable-aikgen"
+		# and no Clearsilver
+		CONFIG="$CONFIG --disable-fast --disable-manager --disable-medsrv"
+	fi
 	PYDEPS="tox"
 	if test "$1" = "build-deps"; then
 		if [ "$ID" = "ubuntu" -a "$VERSION_ID" != "20.04" ]; then
@@ -372,7 +395,7 @@ macos)
 			--enable-socket-default --enable-sshkey --enable-stroke
 			--enable-swanctl --enable-unity --enable-updown
 			--enable-x509 --enable-xauth-generic"
-	DEPS="automake autoconf libtool bison gettext gperf pkg-config openssl@1.1 curl"
+	DEPS="automake autoconf libtool bison gettext gperf pkgconf openssl@1.1 curl"
 	BREW_PREFIX=$(brew --prefix)
 	export PATH=$BREW_PREFIX/opt/bison/bin:$PATH
 	export ACLOCAL_PATH=$BREW_PREFIX/opt/gettext/share/aclocal:$ACLOCAL_PATH
@@ -429,6 +452,10 @@ fuzzing)
 	;;
 nm)
 	DEPS="gnome-common libsecret-1-dev libgtk-3-dev libnm-dev libnma-dev"
+	# Ubuntu 20.04 requires this package explicitly for the ITS rules for the .metainfo.xml file
+	if [ "$ID" = "ubuntu" -a "$VERSION_ID" = "20.04" ]; then
+		DEPS="$DEPS appstream"
+	fi
 	cd src/frontends/gnome
 	# don't run ./configure with ./autogen.sh
 	export NOCONFIGURE=1
@@ -451,8 +478,12 @@ case "$1" in
 deps)
 	case "$OS_NAME" in
 	linux)
-		sudo apt-get update -qq && \
-		sudo apt-get install -qq bison flex gperf gettext $DEPS
+		sudo apt-get update -y && \
+		sudo apt-get install -y bison flex gperf gettext $DEPS
+		;;
+	alpine)
+		apk add --no-cache build-base automake autoconf libtool pkgconfig && \
+		apk add --no-cache bison flex gperf gettext-dev tzdata $DEPS
 		;;
 	macos)
 		brew update && \
@@ -484,7 +515,7 @@ CONFIG="$CONFIG
 	--enable-leak-detective=${LEAK_DETECTIVE-no}"
 
 case "$TEST" in
-	codeql|coverage|freebsd|fuzzing|sonarcloud|win*)
+	alpine|codeql|coverage|freebsd|fuzzing|sonarcloud|win*)
 		# don't use AddressSanitizer if it's not available or causes conflicts
 		CONFIG="$CONFIG --disable-asan"
 		;;

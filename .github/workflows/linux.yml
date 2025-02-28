@@ -26,7 +26,7 @@ jobs:
   latest:
     needs: pre-check
     if: ${{ needs.pre-check.outputs.should_skip != 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
     strategy:
       matrix:
         test: [ all, default, printf-builtin ]
@@ -41,7 +41,8 @@ jobs:
           - test: printf-builtin
             monolithic: yes
         include:
-          - test: apidoc
+          - os: ubuntu-24.04
+            test: apidoc
           - test: coverage
           - test: dist
           - test: nm
@@ -76,7 +77,13 @@ jobs:
       - uses: ./.github/actions/default
       - run: ccache -s
       - if: ${{ success() && matrix.test == 'coverage' }}
-        run: bash <(curl -s https://codecov.io/bash)
+        uses: codecov/codecov-action@v4
+        with:
+          disable_search: true
+          fail_ci_if_error: true
+          file: coverage/coverage.cleaned.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
       - if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:

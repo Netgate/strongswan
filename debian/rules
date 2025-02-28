@@ -36,6 +36,7 @@ CONFIGUREARGS := --libdir=/usr/lib --libexecdir=/usr/lib \
 		--enable-lookip \
 		--enable-mediation \
 		--enable-openssl \
+		--enable-stroke \
 		--enable-unity \
 		--enable-xauth-eap \
 		--enable-xauth-pam \
@@ -181,7 +182,6 @@ endif
 	chmod 600 $(CURDIR)/debian/netgate-strongswan-starter/etc/ipsec.secrets
 	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-starter/etc/ipsec.d/private/
 	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-starter/var/lib/strongswan/
-	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/bliss/
 	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/ecdsa/
 	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/pkcs8/
 	chmod 700 -R $(CURDIR)/debian/netgate-strongswan-swanctl/etc/swanctl/private/
@@ -211,7 +211,6 @@ override_dh_fixperms:
 	dh_fixperms \
 		-X etc/ipsec.d \
 		-X etc/ipsec.secrets \
-		-X etc/swanctl/bliss \
 		-X etc/swanctl/ecdsa \
 		-X etc/swanctl/pkcs8 \
 		-X etc/swanctl/private \
