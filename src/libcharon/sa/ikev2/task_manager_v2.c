@@ -1269,10 +1269,12 @@ static status_t process_request(private_task_manager_t *this,
 									task = (task_t*)ike_auth_lifetime_create(
 															this->ike_sa, FALSE);
 									break;
+								case INVALID_SYNTAX:
 								case AUTHENTICATION_FAILED:
-									/* initiator failed to authenticate us.
-									 * We use ike_delete to handle this, which
-									 * invokes all the required hooks. */
+									/* initiator failed to authenticate us or
+									 * parse our response. we use ike_delete to
+									 * handle this, which invokes all the
+									 * required hooks */
 									task = (task_t*)ike_delete_create(
 														this->ike_sa, FALSE);
 									break;
@@ -2170,6 +2172,7 @@ static void trigger_mbb_reauth(private_task_manager_t *this)
 	new->set_other_host(new, host->clone(host));
 	host = this->ike_sa->get_my_host(this->ike_sa);
 	new->set_my_host(new, host->clone(host));
+	charon->bus->ike_reestablish_pre(charon->bus, this->ike_sa, new);
 	enumerator = this->ike_sa->create_virtual_ip_enumerator(this->ike_sa, TRUE);
 	while (enumerator->enumerate(enumerator, &host))
 	{
@@ -2232,6 +2235,8 @@ static void trigger_mbb_reauth(private_task_manager_t *this)
 #endif /* ME */
 		)
 	{
+		charon->bus->ike_reestablish_post(charon->bus, this->ike_sa, new,
+										  FALSE);
 		charon->ike_sa_manager->checkin_and_destroy(charon->ike_sa_manager, new);
 		DBG1(DBG_IKE, "unable to reauthenticate IKE_SA, no CHILD_SA "
 			 "to recreate");
@@ -2246,10 +2251,14 @@ static void trigger_mbb_reauth(private_task_manager_t *this)
 		new->queue_task(new, (task_t*)ike_verify_peer_cert_create(new));
 		new->queue_task(new, (task_t*)ike_reauth_complete_create(new,
 										this->ike_sa->get_id(this->ike_sa)));
+		charon->bus->ike_reestablish_post(charon->bus, this->ike_sa, new,
+										  TRUE);
 		charon->ike_sa_manager->checkin(charon->ike_sa_manager, new);
 	}
 	else
 	{
+		charon->bus->ike_reestablish_post(charon->bus, this->ike_sa, new,
+										  FALSE);
 		charon->ike_sa_manager->checkin_and_destroy(charon->ike_sa_manager, new);
 		DBG1(DBG_IKE, "reauthenticating IKE_SA failed");
 	}

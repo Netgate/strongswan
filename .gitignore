@@ -57,5 +57,15 @@ test-driver
 nbproject/
 
 # TNSR items
-build-root
 .version
+build-root
+debian/*.log
+debian/*.substvars
+debian/.debhelper
+debian/autoreconf.*
+debian/changelog
+debian/debhelper-build-stamp
+debian/files
+debian/netgate-*
+debian/tmp
+init/systemd/strongswan-dataplane.service

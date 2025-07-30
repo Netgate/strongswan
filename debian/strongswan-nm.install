@@ -1,2 +1,4 @@
+etc/strongswan.d/charon-nm.conf
 usr/lib/ipsec/charon-nm
 usr/share/dbus-1/system.d/nm-strongswan-service.conf
+usr/share/strongswan/templates/config/strongswan.d/charon-nm.conf

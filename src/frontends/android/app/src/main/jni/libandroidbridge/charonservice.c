@@ -504,6 +504,11 @@ static void set_options(char *logfile, jboolean ipv6)
 					"charon.retransmit_base", ANDROID_RETRANSMIT_BASE);
 	lib->settings->set_bool(lib->settings,
 					"charon.initiator_only", TRUE);
+	/* the service currently can't handle make-before-break reauth and assumes
+	 * the old SA is deleted before the replacement and installs a special
+	 * replacement TUN device in-between */
+	lib->settings->set_bool(lib->settings,
+					"charon.make_before_break", FALSE);
 	lib->settings->set_bool(lib->settings,
 					"charon.close_ike_on_child_failure", TRUE);
 	lib->settings->set_bool(lib->settings,
@@ -820,6 +825,7 @@ JNI_METHOD_P(org_strongswan_android_utils, Utils, parseInetAddressBytes, jbyteAr
 	host = host_create_from_string(str, 0);
 	if (!host)
 	{
+		library_deinit();
 		free(str);
 		return NULL;
 	}

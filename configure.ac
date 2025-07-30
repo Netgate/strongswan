@@ -22,6 +22,7 @@
 
 AC_INIT([strongSwan],[m4_esyscmd([./extras/scripts/version | tr -d '\n'])])
 AM_INIT_AUTOMAKE(m4_esyscmd([
+	echo foreign
 	echo tar-ustar
 	echo subdir-objects
 	case `automake --version | head -n 1` in
@@ -70,7 +71,6 @@ ARG_WITH_SET([mpz_powm_sec],         [yes], [use the more side-channel resistant
 ARG_WITH_SET([dev-headers],          [no], [install strongSwan development headers to directory.])
 ARG_WITH_SET([printf-hooks],         [auto], [force the use of a specific printf hook implementation (auto, builtin, glibc, vstr).])
 ARG_WITH_SET([rubygemdir],           ["gem environment gemdir"], [path to install ruby gems to])
-ARG_WITH_SET([pythoneggdir],         ["main site-packages directory"], [path to install python eggs to to])
 
 if test -n "$PKG_CONFIG"; then
 	systemdsystemunitdir_default=$($PKG_CONFIG --variable=systemdsystemunitdir systemd)
@@ -340,8 +340,8 @@ ARG_ENABL_SET([mediation],      [enable IKEv2 Mediation Extension.])
 ARG_ENABL_SET([unwind-backtraces],[use libunwind to create backtraces for memory leaks and segfaults.])
 ARG_ENABL_SET([ruby-gems],      [enable build of provided ruby gems.])
 ARG_ENABL_SET([ruby-gems-install],[enable installation of provided ruby gems.])
-ARG_ENABL_SET([python-eggs],    [enable build of provided python eggs.])
-ARG_ENABL_SET([python-eggs-install],[enable installation of provided python eggs.])
+ARG_ENABL_SET([python-wheels],  [enable build of provided python wheels.])
+ARG_ENABL_SET([python-eggs],    [legacy alias for --enable-python-wheels.])
 ARG_ENABL_SET([perl-cpan],      [enable build of provided perl CPAN module.])
 ARG_ENABL_SET([perl-cpan-install],[enable installation of provided CPAN module.])
 ARG_ENABL_SET([selinux],        [enable SELinux support for labeled IPsec.])
@@ -519,8 +519,8 @@ if test x$ruby_gems_install = xtrue; then
 	ruby_gems=true
 fi
 
-if test x$python_eggs_install = xtrue; then
-	python_eggs=true
+if test x$python_eggs = xtrue; then
+	python_wheels=true
 fi
 
 if test x$perl_cpan_install = xtrue; then
@@ -548,15 +548,28 @@ if test x$cert_enroll = xtrue; then
 fi
 
 if test x$kdf = xfalse; then
+	openssl_hkdf=false
+	if test x$openssl = xtrue; then
+		AC_MSG_CHECKING(for OpenSSL >= 3.0 for HKDF)
+		AC_COMPILE_IFELSE(
+			[AC_LANG_PROGRAM(
+				[[#include <openssl/opensslv.h>]],
+				[[#if OPENSSL_VERSION_NUMBER < 0x30000000L && !defined(OPENSSL_IS_AWSLC)
+					#error OpenSSL version unusable
+				  #endif]])],
+			[AC_MSG_RESULT([yes]); openssl_hkdf=true],
+			[AC_MSG_RESULT([no])]
+		)
+	fi
 	if test x$aesni = xtrue -o x$cmac = xtrue -o x$xcbc = xtrue; then
 		AC_MSG_WARN(m4_normalize([
 			kdf plugin is required for possible use of PRF_AES128_XCBC/CMAC
 			by one of these plugins: aesni, cmac, xcbc]))
 		kdf=true
-	elif test x$botan = xfalse -a x$openssl = xfalse -a x$wolfssl = xfalse; then
+	elif test x$botan = xfalse -a x$openssl_hkdf = xfalse -a x$wolfssl = xfalse; then
 		AC_MSG_WARN(m4_normalize([
 			kdf plugin is required because none of the following plugins is
-			enabled: botan, openssl, wolfssl]))
+			enabled or usable: botan, openssl, wolfssl]))
 		kdf=true
 	fi
 fi
@@ -1384,7 +1397,7 @@ if test x$coverage = xtrue; then
 		AC_MSG_ERROR([genhtml not found])
 	fi
 
-	COVERAGE_CFLAGS="-fprofile-arcs -ftest-coverage"
+	COVERAGE_CFLAGS="-fprofile-arcs -ftest-coverage -fprofile-update=atomic"
 	COVERAGE_LDFLAGS="-fprofile-arcs"
 	AC_SUBST(COVERAGE_CFLAGS)
 	AC_SUBST(COVERAGE_LDFLAGS)
@@ -1450,24 +1463,12 @@ if test x$ruby_gems = xtrue; then
 fi
 AM_CONDITIONAL(RUBY_GEMS_INSTALL, [test "x$ruby_gems_install" = xtrue])
 
-if test x$python_eggs = xtrue; then
+if test x$python_wheels = xtrue; then
 	PYTHON_PACKAGE_VERSION=`echo "$PACKAGE_VERSION" | $SED 's/dr/.dev/'`
 	AC_SUBST([PYTHON_PACKAGE_VERSION])
-	if test x$python_eggs_install = xtrue; then
-		AC_PATH_PROG([EASY_INSTALL], [easy_install], [], [$PATH:/bin:/usr/bin:/usr/local/bin])
-		if test x$EASY_INSTALL = x; then
-			AC_MSG_ERROR(Python easy_install not found)
-		fi
-	fi
-	if test "x$pythoneggdir" = "xmain site-packages directory"; then
-		AC_SUBST(PYTHONEGGINSTALLDIR, "")
-	else
-		AC_SUBST(PYTHONEGGINSTALLDIR, "--install-dir $pythoneggdir")
-	fi
 	AC_PATH_PROG([TOX], [tox], [], [$PATH:/bin:/usr/bin:/usr/local/bin])
 	AC_PATH_PROG([PY_TEST], [py.test], [], [$PATH:/bin:/usr/bin:/usr/local/bin])
 fi
-AM_CONDITIONAL(PYTHON_EGGS_INSTALL, [test "x$python_eggs_install" = xtrue])
 
 AM_CONDITIONAL(PERL_CPAN_INSTALL, [test "x$perl_cpan_install" = xtrue])
 
@@ -1934,7 +1935,7 @@ AM_CONDITIONAL(USE_LEGACY_SYSTEMD, test -n "$systemdsystemunitdir" -a "x$systemd
 AM_CONDITIONAL(USE_CERT_ENROLL, test x$cert_enroll = xtrue)
 AM_CONDITIONAL(USE_CERT_ENROLL_TIMER, test x$cert_enroll_timer = xtrue)
 AM_CONDITIONAL(USE_RUBY_GEMS, test x$ruby_gems = xtrue)
-AM_CONDITIONAL(USE_PYTHON_EGGS, test x$python_eggs = xtrue)
+AM_CONDITIONAL(USE_PYTHON_WHEELS, test x$python_wheels = xtrue)
 AM_CONDITIONAL(USE_PERL_CPAN, test x$perl_cpan = xtrue)
 AM_CONDITIONAL(USE_TOX, test "x$TOX" != x)
 AM_CONDITIONAL(USE_PY_TEST, test "x$PY_TEST" != x -a "x$TOX" = x)
@@ -1982,11 +1983,13 @@ AM_COND_IF([USE_ATTR_SQL], [strongswan_options=${strongswan_options}" pool"])
 AM_COND_IF([USE_CHARON], [strongswan_options=${strongswan_options}" charon charon-logging"])
 AM_COND_IF([USE_FILE_CONFIG], [strongswan_options=${strongswan_options}" starter"])
 AM_COND_IF([USE_IMV_ATTESTATION], [strongswan_options=${strongswan_options}" attest"])
-AM_COND_IF([USE_IMCV], [strongswan_options=${strongswan_options}" imcv"])
+AM_COND_IF([USE_IMCV], [strongswan_options=${strongswan_options}" imcv imv_policy_manager"])
+AM_COND_IF([USE_IMC_SWIMA], [strongswan_options=${strongswan_options}" sw-collector"])
 AM_COND_IF([USE_IMV_SWIMA], [strongswan_options=${strongswan_options}" sec-updater"])
 AM_COND_IF([USE_LIBTNCCS], [strongswan_options=${strongswan_options}" tnc"])
 AM_COND_IF([USE_MANAGER], [strongswan_options=${strongswan_options}" manager"])
 AM_COND_IF([USE_MEDSRV], [strongswan_options=${strongswan_options}" medsrv"])
+AM_COND_IF([USE_NM], [strongswan_options=${strongswan_options}" charon-nm"])
 AM_COND_IF([USE_PKI], [strongswan_options=${strongswan_options}" pki"])
 AM_COND_IF([USE_SWANCTL], [strongswan_options=${strongswan_options}" swanctl"])
 AM_COND_IF([USE_SYSTEMD], [strongswan_options=${strongswan_options}" charon-systemd"])

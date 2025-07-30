@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2024 Rubicon Communications, LLC.
+ * Copyright 2016-2025 Rubicon Communications, LLC.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -114,7 +114,6 @@ static void
 del_pending_tp(u32 sa_id)
 {
 	vapi_type_ipsec_tunnel_protect **tp_vec = lookup_pending_tp(sa_id);
-	vapi_type_ipsec_tunnel_protect *tp;
 
 	if (tp_vec == NULL) {
 		return;
@@ -186,9 +185,9 @@ destroy_pending_tp(void)
 	vapi_type_ipsec_tunnel_protect **tp_vec;
 
 	tnsr_hash_free(said2poolidx);
-	tnsr_pool_foreach(tp_vec, pending_tp_pool, ({
+	tnsr_pool_foreach(tp_vec, pending_tp_pool) {
 		tnsr_vec_free(*tp_vec);
-	}));
+	};
 	tnsr_pool_free(pending_tp_pool);
 }
 
@@ -327,8 +326,6 @@ convert_sa_to_vapi(vapi_type_ipsec_sad_entry_v3 *sa,
 					kernel_ipsec_sa_id_t *id,
 					kernel_ipsec_add_sa_t *data)
 {
-	int addr_len = 4;
-
 	if (!sa || !id || !data) {
 		return -EINVAL;
 	}
@@ -374,7 +371,6 @@ convert_sa_to_vapi(vapi_type_ipsec_sad_entry_v3 *sa,
 		memcpy(&sa->tunnel.dst.un.ip6,
 		       id->dst->get_address(id->dst).ptr, 16);
 	} else {
-		addr_len = 4;
 		sa->tunnel.src.af = ADDRESS_IP4;
 		sa->tunnel.dst.af = ADDRESS_IP4;
 		memcpy(&sa->tunnel.src.un.ip4,
@@ -797,7 +793,7 @@ query_routed_policy(private_kernel_vpp_ipsec_t *this,
 	int outbound = 0;
 	vmgmt2_ipsec_tp_t *tp = NULL;
 	time_t ts_sa, ts_max = 0;
-	u32 *sas_in = NULL, *sa_ids = NULL, *sa_id;
+	u32 *sa_ids = NULL, *sa_id;
 
 	inst_num = id->mark.value - 1;
 

@@ -4,7 +4,7 @@
 build_botan()
 {
 	# same revision used in the build recipe of the testing environment
-	BOTAN_REV=3.6.1
+	BOTAN_REV=3.7.1
 	BOTAN_DIR=$DEPS_BUILD_DIR/botan
 
 	if test -d "$BOTAN_DIR"; then
@@ -28,8 +28,8 @@ build_botan()
 	git clone https://github.com/randombit/botan.git $BOTAN_DIR &&
 	cd $BOTAN_DIR &&
 	git checkout -qf $BOTAN_REV &&
-	python ./configure.py --amalgamation $BOTAN_CONFIG &&
-	make -j4 libs >/dev/null &&
+	./configure.py --amalgamation $BOTAN_CONFIG &&
+	make -j$(nproc) libs >/dev/null &&
 	sudo make install >/dev/null &&
 	sudo ldconfig || exit $?
 	cd -
@@ -62,7 +62,7 @@ build_wolfssl()
 	git checkout -qf $WOLFSSL_REV &&
 	./autogen.sh &&
 	./configure C_EXTRA_FLAGS="$WOLFSSL_CFLAGS" $WOLFSSL_CONFIG &&
-	make -j4 >/dev/null &&
+	make -j$(nproc) >/dev/null &&
 	sudo make install >/dev/null &&
 	sudo ldconfig || exit $?
 	cd -
@@ -84,7 +84,7 @@ build_tss2()
 	curl -L $TSS2_SRC | tar xz -C $DEPS_BUILD_DIR &&
 	cd $TSS2_DIR &&
 	./configure --prefix=$DEPS_PREFIX --disable-doxygen-doc &&
-	make -j4 >/dev/null &&
+	make -j$(nproc) >/dev/null &&
 	sudo make install >/dev/null &&
 	sudo ldconfig || exit $?
 	cd -
@@ -92,21 +92,27 @@ build_tss2()
 
 build_openssl()
 {
-	SSL_REV=3.1.1
+	SSL_REV=3.4.1
 	SSL_PKG=openssl-$SSL_REV
 	SSL_DIR=$DEPS_BUILD_DIR/$SSL_PKG
 	SSL_SRC=https://www.openssl.org/source/$SSL_PKG.tar.gz
 	SSL_INS=$DEPS_PREFIX/ssl
-	SSL_OPT="-d shared no-dtls no-ssl3 no-zlib no-idea no-psk no-srp
+	SSL_OPT="-d shared no-dtls no-ssl3 no-zlib no-idea no-psk
 			 no-tests enable-rfc3779 enable-ec_nistp_64_gcc_128"
 
 	if test -d "$SSL_DIR"; then
 		return
 	fi
 
-	# insist on compiling with gcc and debug information as symbols are otherwise not found
 	if test "$LEAK_DETECTIVE" = "yes"; then
-		SSL_OPT="$SSL_OPT CC=gcc -d"
+		# insist on compiling with gcc and debug information as symbols are
+		# otherwise not found, but we can disable SRP (see below)
+		SSL_OPT="$SSL_OPT no-srp CC=gcc -d"
+	elif test "$CC" != "clang"; then
+		# when using ASan with clang, llvm-symbolizer is used to resolve symbols
+		# and this tool links libcurl, which in turn requires SRP, so we can
+		# only disable it when not building with clang
+		SSL_OPT="$SSL_OPT no-srp"
 	fi
 
 	echo "$ build_openssl()"
@@ -119,7 +125,7 @@ build_openssl()
 	else
 		cd $SSL_DIR &&
 		./config --prefix=$SSL_INS --openssldir=$SSL_INS --libdir=lib $SSL_OPT &&
-		make -j4 >/dev/null &&
+		make -j$(nproc) >/dev/null &&
 		sudo make install_sw >/dev/null &&
 		sudo ldconfig || exit $?
 		cd -
@@ -128,7 +134,7 @@ build_openssl()
 
 build_awslc()
 {
-	LC_REV=1.40.0
+	LC_REV=1.46.1
 	LC_PKG=aws-lc-$LC_REV
 	LC_DIR=$DEPS_BUILD_DIR/$LC_PKG
 	LC_SRC=https://github.com/aws/aws-lc/archive/refs/tags/v${LC_REV}.tar.gz
@@ -173,7 +179,7 @@ system_uses_openssl3()
 
 prepare_system_openssl()
 {
-	# On systems that ship OpenSSL 3 (e.g. Ubuntu 22.04), we require debug
+	# On systems that ship OpenSSL 3 (e.g. Ubuntu 22.04+), we require debug
 	# symbols to whitelist leaks
 	if test "$1" = "deps"; then
 		echo "deb http://ddebs.ubuntu.com $(lsb_release -cs) main restricted
@@ -181,19 +187,24 @@ prepare_system_openssl()
 			deb http://ddebs.ubuntu.com $(lsb_release -cs)-proposed main restricted" | \
 			sudo tee -a /etc/apt/sources.list.d/ddebs.list
 		sudo apt-get install -qq ubuntu-dbgsym-keyring
-		DEPS="$DEPS libssl3-dbgsym"
+		if [ "$ID" = "ubuntu" -a "$VERSION_ID" = "24.04" ]; then
+			DEPS="$DEPS libssl3t64-dbgsym"
+		else
+			DEPS="$DEPS libssl3-dbgsym"
+		fi
 	fi
 	if test "$LEAK_DETECTIVE" = "yes"; then
 		# make sure we can properly whitelist functions with leak detective
 		DEPS="$DEPS binutils-dev"
 		CONFIG="$CONFIG --enable-bfd-backtraces"
-	else
+	elif [ "$ID" = "ubuntu" -a "$VERSION_ID" != "24.04" ]; then
 		# with ASan we have to use the (extremely) slow stack unwind as the
 		# shipped version of the library is built with -fomit-frame-pointer
 		export ASAN_OPTIONS=fast_unwind_on_malloc=0
 	fi
 }
 
+: ${SRC_DIR=$PWD}
 : ${BUILD_DIR=$PWD}
 : ${DEPS_BUILD_DIR=$BUILD_DIR/..}
 : ${DEPS_PREFIX=/usr/local}
@@ -230,6 +241,9 @@ openssl*)
 		use_custom_openssl $1
 	elif system_uses_openssl3; then
 		prepare_system_openssl $1
+	else
+		# the kdf plugin is necessary to build against older OpenSSL versions
+		TESTS_PLUGINS="$TESTS_PLUGINS kdf"
 	fi
 	;;
 gcrypt)
@@ -281,14 +295,9 @@ all|alpine|codeql|coverage|sonarcloud|no-dbg)
 			--disable-osx-attr --disable-tkm --disable-uci
 			--disable-unwind-backtraces
 			--disable-svc --disable-dbghelp-backtraces --disable-socket-win
-			--disable-kernel-wfp --disable-kernel-iph --disable-winhttp
-			--disable-python-eggs-install"
+			--disable-kernel-wfp --disable-kernel-iph --disable-winhttp"
 	# not enabled on the build server
 	CONFIG="$CONFIG --disable-af-alg"
-	# unable to build Botan on Ubuntu 20.04
-	if [ "$ID" = "ubuntu" -a "$VERSION_ID" = "20.04" ]; then
-		CONFIG="$CONFIG --disable-botan"
-	fi
 	if test "$TEST" != "coverage"; then
 		CONFIG="$CONFIG --disable-coverage"
 	else
@@ -298,15 +307,21 @@ all|alpine|codeql|coverage|sonarcloud|no-dbg)
 	DEPS="$DEPS libcurl4-gnutls-dev libsoup2.4-dev libunbound-dev libldns-dev
 		  libmysqlclient-dev libsqlite3-dev clearsilver-dev libfcgi-dev
 		  libldap2-dev libpcsclite-dev libpam0g-dev binutils-dev libnm-dev
-		  libgcrypt20-dev libjson-c-dev python3-pip libtspi-dev libsystemd-dev
-		  libselinux1-dev libiptc-dev"
+		  libgcrypt20-dev libjson-c-dev libtspi-dev libsystemd-dev
+		  libselinux1-dev libiptc-dev ruby-rubygems python3-build tox"
+	if [ "$ID" = "ubuntu" -a "$VERSION_ID" = "22.04" -a "$1" = "build-deps" ]; then
+		# python3-build is broken on 22.04 with venv (https://bugs.launchpad.net/ubuntu/+source/python-build/+bug/1992108)
+		# while installing python3-virtualenv should help, it doesn't. as even
+		# after uninstalling python3-venv, build prefers the latter
+		sudo python3 -m pip install --upgrade build
+	fi
 	if [ "$TEST" = "alpine" ]; then
 		# override the whole list for alpine
 		DEPS="git gmp-dev openldap-dev curl-dev ldns-dev unbound-dev libsoup-dev
 			  tpm2-tss-dev tpm2-tss-sys mariadb-dev wolfssl-dev libgcrypt-dev
 			  botan3-dev pcsc-lite-dev networkmanager-dev linux-pam-dev
 			  iptables-dev libselinux-dev binutils-dev libunwind-dev ruby
-			  py3-setuptools"
+			  py3-setuptools py3-build py3-tox"
 		# musl does not provide backtrace(), so use libunwind
 		CONFIG="$CONFIG --enable-unwind-backtraces"
 		# alpine doesn't have systemd
@@ -316,11 +331,8 @@ all|alpine|codeql|coverage|sonarcloud|no-dbg)
 		# and no Clearsilver
 		CONFIG="$CONFIG --disable-fast --disable-manager --disable-medsrv"
 	fi
-	PYDEPS="tox"
 	if test "$1" = "build-deps"; then
-		if [ "$ID" = "ubuntu" -a "$VERSION_ID" != "20.04" ]; then
-			build_botan
-		fi
+		build_botan
 		build_wolfssl
 		build_tss2
 	fi
@@ -343,13 +355,6 @@ win*)
 		TARGET=
 	else
 		CONFIG="$CONFIG --enable-openssl"
-		case "$IMG" in
-		2015|2017)
-			# old OpenSSL versions don't provide HKDF
-			CONFIG="$CONFIG --enable-kdf"
-			;;
-		esac
-
 		CFLAGS="$CFLAGS -I$OPENSSL_DIR/include"
 		LDFLAGS="-L$OPENSSL_DIR/lib"
 		case "$IMG" in
@@ -452,11 +457,11 @@ fuzzing)
 	;;
 nm)
 	DEPS="gnome-common libsecret-1-dev libgtk-3-dev libnm-dev libnma-dev"
-	# Ubuntu 20.04 requires this package explicitly for the ITS rules for the .metainfo.xml file
-	if [ "$ID" = "ubuntu" -a "$VERSION_ID" = "20.04" ]; then
-		DEPS="$DEPS appstream"
+	ORIG_SRC_DIR="$SRC_DIR"
+	SRC_DIR="$ORIG_SRC_DIR/src/frontends/gnome"
+	if [ "$ORIG_SRC_DIR" = "$BUILD_DIR" ]; then
+		BUILD_DIR="$SRC_DIR"
 	fi
-	cd src/frontends/gnome
 	# don't run ./configure with ./autogen.sh
 	export NOCONFIGURE=1
 	;;
@@ -479,7 +484,7 @@ deps)
 	case "$OS_NAME" in
 	linux)
 		sudo apt-get update -y && \
-		sudo apt-get install -y bison flex gperf gettext $DEPS
+		sudo apt-get install -y automake autoconf libtool pkgconf bison flex gperf gettext $DEPS
 		;;
 	alpine)
 		apk add --no-cache build-base automake autoconf libtool pkgconfig && \
@@ -494,10 +499,6 @@ deps)
 		pkg install -y bison flex gperf gettext $DEPS
 		;;
 	esac
-	exit $?
-	;;
-pydeps)
-	test -z "$PYDEPS" || pip3 -q install --user $PYDEPS
 	exit $?
 	;;
 build-deps)
@@ -522,14 +523,21 @@ case "$TEST" in
 	*)
 		if [ "$LEAK_DETECTIVE" != "yes" ]; then
 			CONFIG="$CONFIG --enable-asan"
+		else
+			CONFIG="$CONFIG --disable-asan"
 		fi
 		;;
 esac
 
-echo "$ ./autogen.sh"
-./autogen.sh || exit $?
+cd $SRC_DIR
+if [ ! -f ./configure ]; then
+	echo "$ ./autogen.sh"
+	./autogen.sh || exit $?
+fi
+
+cd $BUILD_DIR
 echo "$ CC=$CC CFLAGS=\"$CFLAGS\" ./configure $CONFIG"
-CC="$CC" CFLAGS="$CFLAGS" ./configure $CONFIG || exit $?
+CC="$CC" CFLAGS="$CFLAGS" $SRC_DIR/configure $CONFIG || exit $?
 
 case "$TEST" in
 apidoc)
@@ -544,10 +552,10 @@ case "$TEST" in
 sonarcloud)
 	# without target, coverage is currently not supported anyway because
 	# sonarqube only supports gcov, not lcov
-	build-wrapper-linux-x86-64 --out-dir bw-output make -j4 || exit $?
+	build-wrapper-linux-x86-64 --out-dir bw-output make -j$(nproc) || exit $?
 	;;
 *)
-	make -j4 $TARGET || exit $?
+	make -j$(nproc) $TARGET || exit $?
 	;;
 esac
 
@@ -575,7 +583,7 @@ sonarcloud)
 	;;
 android)
 	rm -r strongswan-*
-	cd src/frontends/android
+	cd $SRC_DIR/src/frontends/android
 	echo "$ ./gradlew build"
 	NDK_CCACHE=ccache ./gradlew build --info || exit $?
 	;;
@@ -583,6 +591,7 @@ android)
 	;;
 esac
 
+cd $SRC_DIR
 # ensure there are no unignored build artifacts (or other changes) in the Git repo
 unclean="$(git status --porcelain)"
 if test -n "$unclean"; then
