@@ -21,7 +21,7 @@ jobs:
       - id: skip-check
         uses: fkirc/skip-duplicate-actions@master
         with:
-          concurrent_skipping: 'same_content'
+          concurrent_skipping: 'same_content_newer'
 
   latest:
     needs: pre-check
@@ -47,6 +47,9 @@ jobs:
           - test: nm
           - test: no-dbg
           - test: no-dbg
+            compiler: clang
+          - test: no-testable-ke
+          - test: no-testable-ke
             compiler: clang
           - test: fuzzing
             compiler: clang
@@ -90,14 +93,14 @@ jobs:
           path: config.log
           retention-days: 5
 
-  crypto-plugins:
+  crypto:
     needs: pre-check
     if: ${{ needs.pre-check.outputs.should_skip != 'true' }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-latest, ubuntu-22.04 ]
         test: [ botan, wolfssl, openssl, openssl-3, openssl-awslc, gcrypt ]
+        os: [ ubuntu-latest, ubuntu-22.04 ]
         leak-detective: [ no, yes ]
         exclude:
           # test custom-built libs only on the latest platform

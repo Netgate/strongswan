@@ -46,7 +46,7 @@
 typedef struct private_kernel_vpp_ipsec_t {
 
 	kernel_vpp_ipsec_t public;
-	
+
 	mutex_t *mutex;
 
 	rng_t *rng;
@@ -91,7 +91,7 @@ static int
 add_pending_tp(vapi_type_ipsec_tunnel_protect *tp)
 {
 	vapi_type_ipsec_tunnel_protect **tp_vec;
-       
+
 	if (tp == NULL) {
 		return -EINVAL;
 	}
@@ -346,7 +346,7 @@ convert_sa_to_vapi(vapi_type_ipsec_sad_entry_v3 *sa,
 		       4);
 		/* Byte swap salt. It shouldn't be necessary, but the API
 		 * message defines it as a u32 instead of a u8[] so libvapi
-		 * automatically swaps it. 
+		 * automatically swaps it.
 		 */
 		sa->salt = htonl(sa->salt);
 	}
@@ -470,6 +470,10 @@ vpp_ipsec_sa_expire(vpp_ipsec_sa_expire_t *expire)
 	kernel_ipsec_sa_id_t *id = &expire->id;
 	job_requeue_t ret = JOB_REQUEUE_NONE;
 
+	if (kernel_vpp_check_connection(this) < 0) {
+		return ret;
+	}
+
 	this->mutex->lock(this->mutex);
 
 	if (vmgmt2_ipsec_sa_get(ntohl(id->spi)) == NULL) {
@@ -510,7 +514,7 @@ schedule_expire(private_kernel_vpp_ipsec_t *this, kernel_ipsec_sa_id_t *id,
 	u32 job_delay, job_jitter = 0;
 
 	/* bail if there's no time data */
-	if (!data->lifetime || 
+	if (!data->lifetime ||
 		(!data->lifetime->time.life  && !data->lifetime->time.rekey)) {
 		return;
 	}
@@ -799,7 +803,7 @@ query_routed_policy(private_kernel_vpp_ipsec_t *this,
 
 	if (id->dir == POLICY_OUT) {
 		outbound = 1;
-	} 
+	}
 
 	this->mutex->lock(this->mutex);
 
@@ -847,15 +851,17 @@ METHOD(kernel_ipsec_t, query_policy, status_t,
 		private_kernel_vpp_ipsec_t *this, kernel_ipsec_policy_id_t *id,
 		kernel_ipsec_query_policy_t *data, time_t *use_time)
 {
-	int ret;
+	if (kernel_vpp_check_connection(this) < 0) {
+		return FAILED;
+	}
 
-	ret = query_routed_policy(this, id, data, use_time);
+	int ret = query_routed_policy(this, id, data, use_time);
 	if (ret < 0) {
 		DBG1(DBG_KNL, "kernel_vpp: %s: Error querying policy",
 				__func__);
 		return FAILED;
 	}
-	
+
 	return SUCCESS;
 }
 
@@ -899,7 +905,7 @@ METHOD(kernel_ipsec_t, destroy, void,
  * deallocated.
  *
  * Connections are named after the tunnel interface, which allows us to
- * retrieve the ifindex. 
+ * retrieve the ifindex.
  */
 METHOD(listener_t, assign_vips, bool,
        kernel_vpp_listener_t *this, ike_sa_t *ike_sa, bool assign)
@@ -910,6 +916,10 @@ METHOD(listener_t, assign_vips, bool,
 	enumerator_t *vip_enum;
 	u32 if_index;
 	vapi_type_teib_entry teib;
+
+	if (kernel_vpp_check_connection(vpp_ipsec) < 0) {
+		return true;
+	}
 
 	vpp_ipsec->mutex->lock(vpp_ipsec->mutex);
 
@@ -1154,6 +1164,10 @@ tunnel_protect_child_installed(ike_sa_t *ike_sa, child_sa_t *child_sa)
 	int ret = 0;
 	vapi_type_address *vip_addrs, *vip_addr;
 
+	if (kernel_vpp_check_connection(vpp_ipsec) < 0) {
+		return -1;
+	}
+
 	vpp_ipsec->mutex->lock(vpp_ipsec->mutex);
 
 	if_index = vmgmt2_if_name_to_index(if_name, true /* force_refresh */);
@@ -1191,6 +1205,10 @@ tunnel_protect_child_deleting(ike_sa_t *ike_sa, child_sa_t *child_sa)
 	u32 if_index = ~0;
 	int ret = 0;
 	vapi_type_address *vip_addrs, *vip_addr;
+
+	if (kernel_vpp_check_connection(vpp_ipsec) < 0) {
+		return -1;
+	}
 
 	vpp_ipsec->mutex->lock(vpp_ipsec->mutex);
 

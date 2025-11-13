@@ -2,7 +2,7 @@
 Description=strongSwan IPsec IKEv1/IKEv2 daemon using swanctl
 Requisite=vpp.service
 Requires=tnsr-dataplane-netns.service
-After=tnsr-dataplane-netns.service
+After=tnsr-dataplane-netns.service vpp.service
 
 [Service]
 SyslogIdentifier=strongswan-dataplane

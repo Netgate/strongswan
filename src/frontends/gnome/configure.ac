@@ -1,6 +1,6 @@
 AC_PREREQ([2.69])
 
-AC_INIT([NetworkManager-strongswan],[1.6.1],[info@strongswan.org],[NetworkManager-strongswan])
+AC_INIT([NetworkManager-strongswan],[1.6.2],[info@strongswan.org],[NetworkManager-strongswan])
 AM_INIT_AUTOMAKE([subdir-objects])
 AM_MAINTAINER_MODE
 
@@ -35,8 +35,9 @@ AC_PROG_GCC_TRADITIONAL
 AC_FUNC_MEMCMP
 AC_CHECK_FUNCS(select socket uname)
 
-AC_SEARCH_LIBS([dlopen], [dl dld], [], [ac_cv_search_dlopen=])
-AC_SUBST([DL_LIBS], "$ac_cv_search_dlopen")
+LIBS=""
+AC_SEARCH_LIBS([dlopen], [dl dld], [DL_LIBS=$LIBS])
+AC_SUBST([DL_LIBS])
 
 AM_GNU_GETTEXT_VERSION([0.19])
 AM_GNU_GETTEXT([external])

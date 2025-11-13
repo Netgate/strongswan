@@ -37,7 +37,7 @@ build_botan()
 
 build_wolfssl()
 {
-	WOLFSSL_REV=v5.7.4-stable
+	WOLFSSL_REV=v5.8.0-stable
 	WOLFSSL_DIR=$DEPS_BUILD_DIR/wolfssl
 
 	if test -d "$WOLFSSL_DIR"; then
@@ -54,7 +54,7 @@ build_wolfssl()
 					--enable-aesccm --enable-aesctr --enable-camellia
 					--enable-curve25519 --enable-curve448 --enable-des3
 					--enable-ecccustcurves --enable-ed25519 --enable-ed448
-					--enable-keygen --enable-kyber --with-max-rsa-bits=8192
+					--enable-keygen --enable-mlkem --with-max-rsa-bits=8192
 					--enable-md4 --enable-rsapss --enable-sha3 --enable-shake256"
 
 	git clone https://github.com/wolfSSL/wolfssl.git $WOLFSSL_DIR &&
@@ -92,10 +92,8 @@ build_tss2()
 
 build_openssl()
 {
-	SSL_REV=3.4.1
-	SSL_PKG=openssl-$SSL_REV
-	SSL_DIR=$DEPS_BUILD_DIR/$SSL_PKG
-	SSL_SRC=https://www.openssl.org/source/$SSL_PKG.tar.gz
+	SSL_REV=openssl-3.5.1
+	SSL_DIR=$DEPS_BUILD_DIR/openssl
 	SSL_INS=$DEPS_PREFIX/ssl
 	SSL_OPT="-d shared no-dtls no-ssl3 no-zlib no-idea no-psk
 			 no-tests enable-rfc3779 enable-ec_nistp_64_gcc_128"
@@ -117,7 +115,7 @@ build_openssl()
 
 	echo "$ build_openssl()"
 
-	curl -L $SSL_SRC | tar xz -C $DEPS_BUILD_DIR || exit $?
+	git clone https://github.com/openssl/openssl.git --depth 1 -b $SSL_REV $SSL_DIR || exit $?
 
 	if [ "$TEST" = "android" ]; then
 		OPENSSL_SRC=${SSL_DIR} \
@@ -134,7 +132,7 @@ build_openssl()
 
 build_awslc()
 {
-	LC_REV=1.46.1
+	LC_REV=1.55.0
 	LC_PKG=aws-lc-$LC_REV
 	LC_DIR=$DEPS_BUILD_DIR/$LC_PKG
 	LC_SRC=https://github.com/aws/aws-lc/archive/refs/tags/v${LC_REV}.tar.gz
@@ -274,7 +272,7 @@ printf-builtin)
 		prepare_system_openssl $1
 	fi
 	;;
-all|alpine|codeql|coverage|sonarcloud|no-dbg)
+all|alpine|codeql|coverage|sonarcloud|no-dbg|no-testable-ke)
 	if [ "$TEST" = "sonarcloud" ]; then
 		if [ -z "$SONAR_PROJECT" -o -z "$SONAR_ORGANIZATION" -o -z "$SONAR_TOKEN" ]; then
 			echo "The SONAR_PROJECT, SONAR_ORGANIZATION and SONAR_TOKEN" \
@@ -292,7 +290,7 @@ all|alpine|codeql|coverage|sonarcloud|no-dbg)
 	CONFIG="--enable-all --disable-android-dns --disable-android-log
 			--disable-kernel-pfroute --disable-keychain
 			--disable-lock-profiler --disable-padlock --disable-fuzzing
-			--disable-osx-attr --disable-tkm --disable-uci
+			--disable-osx-attr --disable-tkm
 			--disable-unwind-backtraces
 			--disable-svc --disable-dbghelp-backtraces --disable-socket-win
 			--disable-kernel-wfp --disable-kernel-iph --disable-winhttp"
@@ -304,7 +302,10 @@ all|alpine|codeql|coverage|sonarcloud|no-dbg)
 		DEPS="$DEPS lcov"
 		TARGET="coverage"
 	fi
-	DEPS="$DEPS libcurl4-gnutls-dev libsoup2.4-dev libunbound-dev libldns-dev
+	if [ "$TEST" = "no-testable-ke" ]; then
+		CONFIG="$CONFIG --without-testable-ke"
+	fi
+	DEPS="$DEPS libcurl4-gnutls-dev libsoup-3.0-dev libunbound-dev libldns-dev
 		  libmysqlclient-dev libsqlite3-dev clearsilver-dev libfcgi-dev
 		  libldap2-dev libpcsclite-dev libpam0g-dev binutils-dev libnm-dev
 		  libgcrypt20-dev libjson-c-dev libtspi-dev libsystemd-dev
@@ -317,11 +318,11 @@ all|alpine|codeql|coverage|sonarcloud|no-dbg)
 	fi
 	if [ "$TEST" = "alpine" ]; then
 		# override the whole list for alpine
-		DEPS="git gmp-dev openldap-dev curl-dev ldns-dev unbound-dev libsoup-dev
-			  tpm2-tss-dev tpm2-tss-sys mariadb-dev wolfssl-dev libgcrypt-dev
-			  botan3-dev pcsc-lite-dev networkmanager-dev linux-pam-dev
-			  iptables-dev libselinux-dev binutils-dev libunwind-dev ruby
-			  py3-setuptools py3-build py3-tox"
+		DEPS="git gmp-dev openldap-dev curl-dev ldns-dev unbound-dev libsoup3-dev
+			  libxml2-dev tpm2-tss-dev tpm2-tss-sys mariadb-dev wolfssl-dev
+			  libgcrypt-dev botan3-dev pcsc-lite-dev networkmanager-dev
+			  linux-pam-dev iptables-dev libselinux-dev binutils-dev libunwind-dev
+			  ruby py3-setuptools py3-build py3-tox"
 		# musl does not provide backtrace(), so use libunwind
 		CONFIG="$CONFIG --enable-unwind-backtraces"
 		# alpine doesn't have systemd
@@ -400,10 +401,9 @@ macos)
 			--enable-socket-default --enable-sshkey --enable-stroke
 			--enable-swanctl --enable-unity --enable-updown
 			--enable-x509 --enable-xauth-generic"
-	DEPS="automake autoconf libtool bison gettext gperf pkgconf openssl@1.1 curl"
+	DEPS="automake autoconf libtool bison gperf pkgconf openssl@1.1 curl"
 	BREW_PREFIX=$(brew --prefix)
 	export PATH=$BREW_PREFIX/opt/bison/bin:$PATH
-	export ACLOCAL_PATH=$BREW_PREFIX/opt/gettext/share/aclocal:$ACLOCAL_PATH
 	for pkg in openssl@1.1 curl
 	do
 		PKG_CONFIG_PATH=$BREW_PREFIX/opt/$pkg/lib/pkgconfig:$PKG_CONFIG_PATH
@@ -484,11 +484,11 @@ deps)
 	case "$OS_NAME" in
 	linux)
 		sudo apt-get update -y && \
-		sudo apt-get install -y automake autoconf libtool pkgconf bison flex gperf gettext $DEPS
+		sudo apt-get install -y automake autoconf libtool pkgconf bison flex gperf $DEPS
 		;;
 	alpine)
 		apk add --no-cache build-base automake autoconf libtool pkgconfig && \
-		apk add --no-cache bison flex gperf gettext-dev tzdata $DEPS
+		apk add --no-cache bison flex gperf tzdata $DEPS
 		;;
 	macos)
 		brew update && \
@@ -496,7 +496,7 @@ deps)
 		;;
 	freebsd)
 		pkg install -y automake autoconf libtool pkgconf && \
-		pkg install -y bison flex gperf gettext $DEPS
+		pkg install -y bison flex gperf $DEPS
 		;;
 	esac
 	exit $?

@@ -1,3 +1,11 @@
+# 2.5.6 #
+
+- Add support for custom HTTP proxy server (Android 10+)
+
+# 2.5.5 #
+
+- Fix initiating managed profiles as Always-on VPN
+
 # 2.5.4 #
 
 - Fix issues when reestablishing the connection

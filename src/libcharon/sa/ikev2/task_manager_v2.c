@@ -1168,7 +1168,7 @@ static status_t process_request(private_task_manager_t *this,
 				task = (task_t*)ike_auth_lifetime_create(this->ike_sa, FALSE);
 				array_insert(this->passive_tasks, ARRAY_TAIL, task);
 				task = (task_t*)child_create_create(this->ike_sa, NULL, FALSE,
-													NULL, NULL);
+													NULL, NULL, 0);
 				array_insert(this->passive_tasks, ARRAY_TAIL, task);
 				break;
 			}
@@ -1222,7 +1222,7 @@ static status_t process_request(private_task_manager_t *this,
 					else
 					{
 						task = (task_t*)child_create_create(this->ike_sa, NULL,
-															FALSE, NULL, NULL);
+															FALSE, NULL, NULL, 0);
 					}
 				}
 				else
@@ -2121,7 +2121,7 @@ METHOD(task_manager_t, queue_ike, void,
 		peer_cfg_t *peer_cfg;
 
 		peer_cfg = this->ike_sa->get_peer_cfg(this->ike_sa);
-		if (peer_cfg->use_mobike(peer_cfg))
+		if (!peer_cfg->has_option(peer_cfg, OPT_NO_MOBIKE))
 		{
 			queue_task(this, (task_t*)ike_mobike_create(this->ike_sa, TRUE));
 		}
@@ -2196,7 +2196,8 @@ static void trigger_mbb_reauth(private_task_manager_t *this)
 		}
 		cfg = child_sa->get_config(child_sa);
 		child_create = child_create_create(new, cfg->get_ref(cfg),
-										   FALSE, NULL, NULL);
+										   FALSE, NULL, NULL, 0);
+		child_create->recreate_sa(child_create, child_sa);
 		reqid = child_sa->get_reqid_ref(child_sa);
 		if (reqid)
 		{
@@ -2207,6 +2208,8 @@ static void trigger_mbb_reauth(private_task_manager_t *this)
 								child_sa->get_mark(child_sa, TRUE).value,
 								child_sa->get_mark(child_sa, FALSE).value);
 		child_create->use_label(child_create, child_sa->get_label(child_sa));
+		child_create->use_per_cpu(child_create, child_sa->use_per_cpu(child_sa),
+								  child_sa->get_cpu(child_sa));
 		/* interface IDs are not migrated as the new CHILD_SAs on old and new
 		 * IKE_SA go though regular updown events */
 		new->queue_task(new, &child_create->task);
@@ -2369,19 +2372,37 @@ METHOD(task_manager_t, queue_dpd, void,
 }
 
 METHOD(task_manager_t, queue_child, void,
-	private_task_manager_t *this, child_cfg_t *cfg, child_init_args_t *args)
+	private_task_manager_t *this, child_cfg_t *cfg, child_init_args_t *args,
+	child_sa_t *child_sa)
 {
 	child_create_t *task;
+	uint32_t reqid;
 
-	if (args)
+	if (child_sa)
 	{
-		task = child_create_create(this->ike_sa, cfg, FALSE, args->src, args->dst);
+		task = child_create_create(this->ike_sa, cfg, FALSE, NULL, NULL, 0);
+		task->recreate_sa(task, child_sa);
+		reqid = child_sa->get_reqid_ref(child_sa);
+		if (reqid)
+		{
+			task->use_reqid(task, reqid);
+			charon->kernel->release_reqid(charon->kernel, reqid);
+		}
+		task->use_label(task, child_sa->get_label(child_sa));
+		task->use_per_cpu(task, child_sa->use_per_cpu(child_sa),
+						  child_sa->get_cpu(child_sa));
+	}
+	else if (args)
+	{
+		task = child_create_create(this->ike_sa, cfg, FALSE, args->src,
+								   args->dst, args->seq);
 		task->use_reqid(task, args->reqid);
 		task->use_label(task, args->label);
+		task->use_per_cpu(task, FALSE, args->cpu);
 	}
 	else
 	{
-		task = child_create_create(this->ike_sa, cfg, FALSE, NULL, NULL);
+		task = child_create_create(this->ike_sa, cfg, FALSE, NULL, NULL, 0);
 	}
 	queue_task(this, &task->task);
 }

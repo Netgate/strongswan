@@ -57,6 +57,10 @@ CONFIGUREARGS := --libdir=/usr/lib --libexecdir=/usr/lib \
 # get the various DEB_BUILD/DEB_HOST variables
 include /usr/share/dpkg/architecture.mk
 
+# --enable-warnings is on by default when building from repository and it adds
+#  -Werror which breaks the build.  Explictly disable it
+CONFIGUREARGS += --disable-warnings
+
 # the padlock plugin only makes sense on i386
 # AESNI and RdRand only make sense on i386 and amd64
 ifeq ($(DEB_HOST_ARCH_CPU),i386)
@@ -233,7 +237,7 @@ ifeq ($(HOME),/home/salsa-ci)
 override_dh_auto_test: export TESTS_SUITES_EXCLUDE=http fetcher, stream
 endif
 override_dh_auto_test:
-ifeq ($(DEB_BUILD_ARCH),amd64_DISABLED)
+ifeq ($(DEB_BUILD_ARCH),amd64)
 	dh_auto_test
 endif
 
@@ -242,9 +246,6 @@ override_dh_missing-arch:
 
 override_dh_missing-indep:
 	dh_missing --list-missing
-
-override_dh_strip:
-	dh_strip --dbg-package=netgate-strongswan-dbg
 
 %:
 	dh $@

@@ -1,6 +1,8 @@
 usr/lib/ipsec/charon
 usr/share/strongswan/templates/config/strongswan.d/charon.conf
 usr/share/strongswan/templates/config/strongswan.d/charon-logging.conf
+usr/share/strongswan/templates/config/strongswan.d/iptfs.conf
 etc/strongswan.d/charon-logging.conf
 etc/strongswan.d/charon.conf
+etc/strongswan.d/iptfs.conf
 debian/usr.lib.ipsec.charon /etc/apparmor.d/

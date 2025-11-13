@@ -55,10 +55,9 @@ coverage/
 /*.includes
 test-driver
 nbproject/
+*.[si]
 
 # TNSR items
-.version
-build-root
 debian/*.log
 debian/*.substvars
 debian/.debhelper

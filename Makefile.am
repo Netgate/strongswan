@@ -86,21 +86,8 @@ coverage:
 		@echo "reconfigure with --enable-coverage"
 endif
 
-#### include version information in the distibution tarball
-EXTRA_DIST += extras/scripts/version
-EXTRA_DIST += debian
-
-extras/scripts/.tmpversion:
-	sh extras/scripts/version > extras/scripts/.tmpversion
-
-DISTCLEANFILES = extras/scripts/.version *.tar.gz
-
-dist-hook: extras/scripts/.tmpversion
-	mv $(srcdir)/extras/scripts/.tmpversion $(distdir)/extras/scripts/.version
-
 clean-local: cov-reset-common
 		@find $(top_builddir)/src $(top_builddir)/scripts -name "*.gcno" -delete
 		@rm -rf apidoc
-		@rm -rf build-root
 
 .PHONY: cov-reset-common cov-reset cov-report coverage apidoc

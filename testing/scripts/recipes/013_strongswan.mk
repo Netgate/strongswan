@@ -23,7 +23,6 @@ CONFIG_OPTS = \
 	--with-random-device=/dev/urandom \
 	--disable-load-warning \
 	--enable-curl \
-	--enable-soup \
 	--enable-ldap \
 	--enable-eap-aka \
 	--enable-eap-aka-3gpp2 \
@@ -127,11 +126,8 @@ $(PKG): $(TAR)
 	echo "$(SWANVERSION)" > /root/shared/.strongswan-version
 
 configure: $(BUILDDIR)
-	cd $(BUILDDIR) && $(DIR)/configure $(CONFIG_OPTS)
+	[ -n "$(QUICK_REBUILD)" ] || (cd $(BUILDDIR) && $(DIR)/configure $(CONFIG_OPTS))
 
-build: configure
-	cd $(BUILDDIR) && make -j $(NUM_CPUS)
-
-install: build
+install: configure
 	cd $(BUILDDIR) && make -j install && \
 		cd $(DIR)/src/libcharon/plugins/vici/python && python3 setup.py install

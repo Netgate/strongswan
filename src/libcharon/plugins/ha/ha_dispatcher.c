@@ -371,13 +371,13 @@ static void process_ike_add(private_ha_dispatcher_t *this, ha_message_t *message
  */
 static void set_conditions(ike_sa_t *ike_sa, ike_condition_t conditions)
 {
-	ike_condition_t i;
+	ike_condition_t i, private = (conditions & COND_PRIVATE_MARKER);
 
-	for (i = 0; i < sizeof(i) * 8; ++i)
+	for (i = 0; i < (sizeof(i) * 8) - 1; ++i)
 	{
-		ike_condition_t cond = (1 << i);
+		ike_condition_t cond = (1 << i) | private;
 
-		ike_sa->set_condition(ike_sa, cond, (conditions & cond) != 0);
+		ike_sa->set_condition(ike_sa, cond, (conditions & cond) == cond);
 	}
 }
 
@@ -386,13 +386,13 @@ static void set_conditions(ike_sa_t *ike_sa, ike_condition_t conditions)
  */
 static void set_extensions(ike_sa_t *ike_sa, ike_extension_t extensions)
 {
-	ike_extension_t i;
+	ike_extension_t i, private = (extensions & EXT_PRIVATE_MARKER);
 
-	for (i = 0; i < sizeof(i) * 8; ++i)
+	for (i = 0; i < (sizeof(i) * 8) - 1; ++i)
 	{
-		ike_extension_t ext = (1 << i);
+		ike_extension_t ext = (1 << i) | private;
 
-		if (extensions & ext)
+		if ((extensions & ext) == ext)
 		{
 			ike_sa->enable_extension(ike_sa, ext);
 		}
@@ -820,6 +820,7 @@ static void process_child_add(private_ha_dispatcher_t *this,
 
 	child_sa_create_t data = {
 		.encap = ike_sa->has_condition(ike_sa, COND_NAT_ANY),
+		.cpu = CPU_ID_MAX,
 	};
 	child_sa = child_sa_create(ike_sa->get_my_host(ike_sa),
 							   ike_sa->get_other_host(ike_sa), config, &data);
@@ -1184,7 +1185,7 @@ ha_dispatcher_t *ha_dispatcher_create(ha_socket_t *socket,
 	);
 	lib->processor->queue_job(lib->processor,
 		(job_t*)callback_job_create_with_prio((callback_job_cb_t)dispatch, this,
-				NULL, (callback_job_cancel_t)return_false, JOB_PRIO_CRITICAL));
+				NULL, callback_job_cancel_thread, JOB_PRIO_CRITICAL));
 
 	return &this->public;
 }
