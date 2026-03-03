@@ -2,6 +2,10 @@ name: Linux
 
 on: [push, pull_request]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   # this test case does not actually test anything but tries to access system
   # directories that might be inaccessible on build hosts
@@ -116,6 +120,7 @@ jobs:
       LEAK_DETECTIVE: ${{ matrix.leak-detective || 'no' }}
       CC: ${{ matrix.compiler || 'gcc' }}
       TEST: ${{ matrix.test }}
+      ACTIVE_TRANSFORMS_REF: .github/active-transforms/${{ matrix.test }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -134,13 +139,17 @@ jobs:
           sudo apt-get install -qq ccache
           echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV
           ccache -z
+          echo "TESTS_ACTIVE_TRANSFORMS=$HOME/active-transforms.log" >> $GITHUB_ENV
       - uses: ./.github/actions/default
-      - name: Test Vectors (detailed)
-        env:
-          TESTS_SUITES: vectors
-          TESTS_VERBOSITY: 1
-        run:
-          ./scripts/test.sh
+      - name: Upload active transforms
+        uses: actions/upload-artifact@v4
+        with:
+          name: active-transforms-${{ matrix.test }}-${{ matrix.os }}-${{ matrix.leak-detective }}
+          path: ${{ env.TESTS_ACTIVE_TRANSFORMS }}
+          retention-days: 5
+      - name: Verify active transforms
+        run: |
+          test ! -f $ACTIVE_TRANSFORMS_REF || diff -u --color=always $ACTIVE_TRANSFORMS_REF $TESTS_ACTIVE_TRANSFORMS
       - run: ccache -s
       - if: ${{ failure() }}
         uses: actions/upload-artifact@v4

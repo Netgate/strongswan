@@ -9,7 +9,7 @@ Vcs-Browser: https://salsa.debian.org/debian/strongswan
 Vcs-Git: https://salsa.debian.org/debian/strongswan.git
 Build-Depends: bison,
                bzip2,
-               debhelper-compat (= 12),
+               debhelper-compat (= 13),
                dh-apparmor,
                dpkg-dev (>= 1.16.2),
                flex,

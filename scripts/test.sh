@@ -21,8 +21,10 @@ build_botan()
 		BOTAN_CONFIG="--without-os-features=threads
 					  --disable-modules=locking_allocator"
 	fi
-	# disable some larger modules we don't need for the tests
+	# disable some larger modules we don't need for the tests and deprecated
+	# ones, except for MD5, which we need for TLS 1.0/1.1
 	BOTAN_CONFIG="$BOTAN_CONFIG --disable-modules=pkcs11,tls,x509,xmss
+				  --disable-deprecated-features --enable-modules=md5
 				  --prefix=$DEPS_PREFIX"
 
 	git clone https://github.com/randombit/botan.git $BOTAN_DIR &&
@@ -37,7 +39,7 @@ build_botan()
 
 build_wolfssl()
 {
-	WOLFSSL_REV=v5.8.0-stable
+	WOLFSSL_REV=v5.8.2-stable
 	WOLFSSL_DIR=$DEPS_BUILD_DIR/wolfssl
 
 	if test -d "$WOLFSSL_DIR"; then
@@ -51,7 +53,7 @@ build_wolfssl()
 					-DRSA_MIN_SIZE=1024"
 	WOLFSSL_CONFIG="--prefix=$DEPS_PREFIX
 					--disable-crypttests --disable-examples
-					--enable-aesccm --enable-aesctr --enable-camellia
+					--enable-aesccm --enable-aesctr --enable-aescfb --enable-camellia
 					--enable-curve25519 --enable-curve448 --enable-des3
 					--enable-ecccustcurves --enable-ed25519 --enable-ed448
 					--enable-keygen --enable-mlkem --with-max-rsa-bits=8192
@@ -92,7 +94,7 @@ build_tss2()
 
 build_openssl()
 {
-	SSL_REV=openssl-3.5.1
+	SSL_REV=openssl-3.6.0
 	SSL_DIR=$DEPS_BUILD_DIR/openssl
 	SSL_INS=$DEPS_PREFIX/ssl
 	SSL_OPT="-d shared no-dtls no-ssl3 no-zlib no-idea no-psk
@@ -132,7 +134,7 @@ build_openssl()
 
 build_awslc()
 {
-	LC_REV=1.55.0
+	LC_REV=1.61.1
 	LC_PKG=aws-lc-$LC_REV
 	LC_DIR=$DEPS_BUILD_DIR/$LC_PKG
 	LC_SRC=https://github.com/aws/aws-lc/archive/refs/tags/v${LC_REV}.tar.gz
@@ -273,13 +275,6 @@ printf-builtin)
 	fi
 	;;
 all|alpine|codeql|coverage|sonarcloud|no-dbg|no-testable-ke)
-	if [ "$TEST" = "sonarcloud" ]; then
-		if [ -z "$SONAR_PROJECT" -o -z "$SONAR_ORGANIZATION" -o -z "$SONAR_TOKEN" ]; then
-			echo "The SONAR_PROJECT, SONAR_ORGANIZATION and SONAR_TOKEN" \
-				 "environment variables are required to run this test"
-			exit 1
-		fi
-	fi
 	if [ "$TEST" = "codeql" ]; then
 		# don't run tests, only analyze built code
 		TARGET=
@@ -393,18 +388,19 @@ macos)
 	# use the same options as in the Homebrew Formula
 	CONFIG="--disable-defaults --enable-charon --enable-cmd --enable-constraints
 			--enable-curl --enable-eap-gtc --enable-eap-identity
-			--enable-eap-md5 --enable-eap-mschapv2 --enable-farp --enable-ikev1
-			--enable-ikev2 --enable-kernel-libipsec --enable-kernel-pfkey
+			--enable-eap-md5 --enable-eap-mschapv2 --enable-eap-peap
+			--enable-dhcp --enable-farp --enable-ikev1 --enable-ikev2
+			--enable-kernel-libipsec --enable-kernel-pfkey
 			--enable-kernel-pfroute --enable-nonce --enable-openssl
 			--enable-osx-attr --enable-pem --enable-pgp --enable-pkcs1
-			--enable-pkcs8 --enable-pki --enable-pubkey --enable-revocation
-			--enable-socket-default --enable-sshkey --enable-stroke
-			--enable-swanctl --enable-unity --enable-updown
-			--enable-x509 --enable-xauth-generic"
-	DEPS="automake autoconf libtool bison gperf pkgconf openssl@1.1 curl"
+			--enable-pkcs8 --enable-pkcs11 --enable-pki --enable-pubkey
+			--enable-revocation --enable-socket-default --enable-sshkey
+			--enable-stroke --enable-swanctl --enable-unity --enable-updown
+			--enable-x509 --enable-xauth-generic --enable-drbg"
+	DEPS="automake autoconf libtool bison gperf pkgconf openssl@3 curl"
 	BREW_PREFIX=$(brew --prefix)
 	export PATH=$BREW_PREFIX/opt/bison/bin:$PATH
-	for pkg in openssl@1.1 curl
+	for pkg in openssl@3 curl
 	do
 		PKG_CONFIG_PATH=$BREW_PREFIX/opt/$pkg/lib/pkgconfig:$PKG_CONFIG_PATH
 		CPPFLAGS="-I$BREW_PREFIX/opt/$pkg/include $CPPFLAGS"
@@ -552,7 +548,7 @@ case "$TEST" in
 sonarcloud)
 	# without target, coverage is currently not supported anyway because
 	# sonarqube only supports gcov, not lcov
-	build-wrapper-linux-x86-64 --out-dir bw-output make -j$(nproc) || exit $?
+	build-wrapper-linux-x86-64 --out-dir $BUILD_WRAPPER_OUT_DIR make -j$(nproc) || exit $?
 	;;
 *)
 	make -j$(nproc) $TARGET || exit $?
@@ -566,20 +562,6 @@ apidoc)
 		exit 1
 	fi
 	rm make.warnings
-	;;
-sonarcloud)
-	sonar-scanner \
-		-Dsonar.host.url=https://sonarcloud.io \
-		-Dsonar.projectKey=${SONAR_PROJECT} \
-		-Dsonar.organization=${SONAR_ORGANIZATION} \
-		-Dsonar.token=${SONAR_TOKEN} \
-		-Dsonar.projectVersion=$(git describe --exclude 'android-*')+${BUILD_NUMBER} \
-		-Dsonar.sources=. \
-		-Dsonar.cfamily.threads=2 \
-		-Dsonar.cfamily.analysisCache.mode=fs \
-		-Dsonar.cfamily.analysisCache.path=$HOME/.sonar-cache \
-		-Dsonar.cfamily.build-wrapper-output=bw-output || exit $?
-	rm -r bw-output .scannerwork
 	;;
 android)
 	rm -r strongswan-*

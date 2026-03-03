@@ -44,7 +44,7 @@ METHOD(plugin_t, destroy, void,
 	free(this);
 }
 
-plugin_t *kernel_vpp_plugin_create()
+PLUGIN_DEFINE(kernel_vpp)
 {
 	private_kernel_vpp_plugin_t *this;
 
